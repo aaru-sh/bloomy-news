@@ -1,7 +1,10 @@
+import os
 import sqlite3
 import json
 import hashlib
 import re
+import tempfile
+import threading
 from pathlib import Path
 
 BASE = Path(__file__).parent.resolve()
@@ -148,11 +151,17 @@ def is_duplicate(title, url, summary=''):
             if row:
                 return True, row['id'], 1.0, 'arxiv_id'
         title_words = extract_title_words(title)
-        rows = conn.execute("""
+        if not title_words:
+            return False, None, 0.0, None
+        anchor_words = sorted(title_words.split(), key=len, reverse=True)[:3]
+        like_clause = " OR ".join(["title_words LIKE ?"] * len(anchor_words))
+        like_params = [f'%{w}%' for w in anchor_words]
+        rows = conn.execute(f"""
             SELECT id, title, title_words FROM articles
             WHERE published > datetime('now', '-7 days')
+            AND ({like_clause})
             ORDER BY id DESC LIMIT 200
-        """).fetchall()
+        """, like_params).fetchall()
         for row in rows:
             existing = row['title_words'] or row['title']
             sim = title_similarity(title_words, existing)
@@ -213,33 +222,55 @@ def store_article(article):
     finally:
         conn.close()
 
+def _fts_search_ids(conn, query, limit=500):
+    """Run FTS5 search; return list of rowids or [] on any failure.
+
+    Defensive: never propagate exceptions out of the search path.
+    """
+    try:
+        fts_query = ' OR '.join(f'"{w}"' for w in query.split() if w)
+        if not fts_query:
+            return []
+        rows = conn.execute(
+            "SELECT rowid FROM articles_fts WHERE articles_fts MATCH ? ORDER BY rank LIMIT ?",
+            (fts_query, limit),
+        ).fetchall()
+        return [r[0] for r in rows]
+    except Exception:
+        return []
+
+
 def get_articles(category=None, source=None, date_from=None, date_to=None, search=None, is_read=None, limit=50, offset=0):
     conn = get_connection()
     try:
         conditions = []
         params = []
         if category:
-            conditions.append("category = ?")
+            conditions.append("a.category = ?")
             params.append(category)
         if source:
-            conditions.append("source = ?")
+            conditions.append("a.source = ?")
             params.append(source)
         if date_from:
             # Use SQLite's date() so date-only inputs (e.g. "2025-12-15")
             # match full ISO timestamps in the column ("2025-12-15T10:30:00").
-            conditions.append("date(published) >= date(?)")
+            conditions.append("date(a.published) >= date(?)")
             params.append(date_from)
         if date_to:
-            conditions.append("date(published) <= date(?)")
+            conditions.append("date(a.published) <= date(?)")
             params.append(date_to)
         if is_read is not None:
-            conditions.append("is_read = ?")
+            conditions.append("a.is_read = ?")
             params.append(1 if is_read else 0)
         if search:
-            conditions.append("(title LIKE ? OR summary LIKE ?)")
-            params.extend([f'%{search}%', f'%{search}%'])
+            fts_ids = _fts_search_ids(conn, search)
+            if not fts_ids:
+                return []
+            placeholders = ",".join("?" * len(fts_ids))
+            conditions.append(f"a.id IN ({placeholders})")
+            params.extend(fts_ids)
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
-        query = f"SELECT * FROM articles{where} ORDER BY published DESC, id DESC LIMIT ? OFFSET ?"
+        query = f"SELECT * FROM articles a{where} ORDER BY a.published DESC, a.id DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
@@ -312,26 +343,55 @@ def mark_starred(id):
         conn.close()
 
 BOOKMARKS_FILE = BASE / "dashboard" / "data" / "bookmarks.json"
+_BOOKMARKS_LOCK = threading.Lock()
 
 def get_bookmarks():
-    """Get list of bookmarked article IDs."""
-    if BOOKMARKS_FILE.exists():
+    """Get list of bookmarked article IDs.
+
+    Tolerates both file shapes seen in the wild: a bare JSON list
+    (the historical database format) and a ``{"bookmarks": [...]}`` dict
+    (the format serve.py writes). Always returns a list of ID strings.
+    """
+    if not BOOKMARKS_FILE.exists():
+        return []
+    try:
         with open(BOOKMARKS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("bookmarks"), list):
+        return data["bookmarks"]
     return []
 
 def toggle_bookmark(article_id):
-    """Toggle bookmark status. Returns True if now bookmarked."""
-    bookmarks = get_bookmarks()
-    if article_id in bookmarks:
-        bookmarks.remove(article_id)
-        starred = False
-    else:
-        bookmarks.append(article_id)
-        starred = True
-    BOOKMARKS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(BOOKMARKS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(bookmarks, f)
+    """Toggle bookmark status. Returns True if now bookmarked.
+
+    Atomic write: tempfile in the target directory + os.replace, serialized
+    across threads via _BOOKMARKS_LOCK so concurrent toggles cannot
+    interleave and corrupt the file.
+    """
+    with _BOOKMARKS_LOCK:
+        bookmarks = get_bookmarks()
+        if article_id in bookmarks:
+            bookmarks.remove(article_id)
+            starred = False
+        else:
+            bookmarks.append(article_id)
+            starred = True
+        BOOKMARKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=BOOKMARKS_FILE.parent)
+        try:
+            with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+                json.dump(bookmarks, f)
+            os.replace(tmp_path, BOOKMARKS_FILE)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
     return starred
 
 def get_stats():
