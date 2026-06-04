@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bloomy-news"
+version = "1.0.0"
+description = "Self-hosted AI/ML/finance/cybersecurity news aggregator with a local dashboard and Telegram digest."
+readme = "README.md"
+license = {text = "MIT"}
+license-files = ["LICENSE"]
+requires-python = ">=3.8"
+keywords = [
+    "news",
+    "aggregator",
+    "rss",
+    "ai",
+    "machine-learning",
+    "cybersecurity",
+    "finance",
+    "dashboard",
+    "telegram",
+    "arxiv",
+]
+authors = [
+    {name = "Bloomy News contributors"}
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: News/Diary",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Security",
+    "Topic :: Utilities",
+    "Typing :: Untyped",
+]
+dependencies = [
+    "requests>=2.28.0",
+]
+
+[project.urls]
+"Source" = "https://github.com/anomalyco/bloomy-news"
+"Bug Tracker" = "https://github.com/anomalyco/bloomy-news/issues"
+"Changelog" = "https://github.com/anomalyco/bloomy-news/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+# We don't actually ship a Python package — the project is a flat
+# script collection that runs from the project root. This block
+# exists so `pip install -e .` works for dependency management
+# without breaking the existing entry-point usage:
+#
+#     python news_tool.py
+#     python dashboard/serve.py
+#     python scripts/scheduler.py
+#     python scripts/telegram_bot.py
+#     python scripts/smoke_test.py
+#
+# We deliberately do NOT add [project.scripts] console entry points
+# because the project is invoked by absolute path from the scheduler
+# and by the LAUNCH_DAILY.bat / launch_daily.sh wrappers.
+platforms = ["any"]
+include-package-data = false
