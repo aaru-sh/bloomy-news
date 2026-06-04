@@ -154,5 +154,122 @@ class TestScheduler(unittest.TestCase):
         self.assertEqual(nxt.day, 3)
 
 
+class TestConcurrentPipelineInserts(unittest.TestCase):
+    """Two pipeline runs launched simultaneously must not double-insert.
+
+    Each thread opens its own connection (the design choice from the
+    6-issue code review: 3-instance single-process is fine for a laptop
+    project; we don't need a global lock). The articles table has a
+    UNIQUE INDEX on url, so even if both threads try to insert the
+    same URL, SQLite will reject the second one with IntegrityError,
+    which is_duplicate() catches and treats as a duplicate.
+    """
+
+    def setUp(self):
+        import database
+        from database import DB_PATH
+
+        self._database = database
+        self._tmpdir = Path(tempfile.mkdtemp())
+        self._tmp_db = self._tmpdir / "news.db"
+        self._original_db_path = database.DB_PATH
+        database.DB_PATH = self._tmp_db
+        database.init_db()
+
+    def tearDown(self):
+        self._database.DB_PATH = self._original_db_path
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_concurrent_inserts_dedupe_by_url(self):
+        import threading
+        from database import store_article, get_connection
+
+        articles = [
+            {
+                'title': f'Concurrent article {i}',
+                'url': f'https://example.com/concurrent/{i}',
+                'source': 'test',
+                'category': 'LLM',
+                'published': '2026-06-01T00:00:00',
+            }
+            for i in range(20)
+        ]
+
+        results = []
+        results_lock = threading.Lock()
+
+        def worker(article_batch):
+            inserted = 0
+            dup = 0
+            for art in article_batch:
+                is_new, _ = store_article(art)
+                if is_new:
+                    inserted += 1
+                else:
+                    dup += 1
+            with results_lock:
+                results.append((inserted, dup))
+
+        t1 = threading.Thread(target=worker, args=(articles[:10],))
+        t2 = threading.Thread(target=worker, args=(articles[10:],))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        total_inserted = sum(r[0] for r in results)
+        total_dup = sum(r[1] for r in results)
+        self.assertEqual(total_inserted, 20)
+        self.assertEqual(total_dup, 0)
+
+        conn = get_connection()
+        try:
+            count = conn.execute("SELECT COUNT(*) as cnt FROM articles").fetchone()['cnt']
+            self.assertEqual(count, 20)
+        finally:
+            conn.close()
+
+    def test_concurrent_inserts_of_same_url_only_one_wins(self):
+        import threading
+        from database import store_article, get_connection
+
+        article = {
+            'title': 'Race-condition article',
+            'url': 'https://example.com/race/1',
+            'source': 'test',
+            'category': 'LLM',
+            'published': '2026-06-01T00:00:00',
+        }
+
+        results = []
+        results_lock = threading.Lock()
+
+        def worker():
+            is_new, _ = store_article(article)
+            with results_lock:
+                results.append(is_new)
+
+        threads = [threading.Thread(target=worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        winners = sum(1 for r in results if r)
+        self.assertEqual(winners, 1)
+        self.assertEqual(len(results) - winners, 4)
+
+        conn = get_connection()
+        try:
+            count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM articles WHERE url = ?",
+                ('https://example.com/race/1',)
+            ).fetchone()['cnt']
+            self.assertEqual(count, 1)
+        finally:
+            conn.close()
+
+
 if __name__ == '__main__':
     unittest.main()

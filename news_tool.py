@@ -450,6 +450,7 @@ CATEGORY_EXAMPLES = {
         'Researchers probe hallucination rates in retrieval-augmented LLMs',
         'Anthropic publishes constitutional AI methods paper',
         'Anthropic releases Claude API with extended context for developers',
+        'New transformer architecture for large language models achieves SOTA on benchmarks',
         'In-context learning lets small models match fine-tuned baselines',
         'Tokenization choices affect downstream multilingual performance',
     ],
@@ -561,9 +562,11 @@ def _get_embedding_model():
 
 def _classify_embedding(article):
     global EMBEDDING_AVAILABLE
-    title = article.get('title', '')
-    summary = article.get('summary', '')
-    text = f"{title}. {summary}"
+    title = article.get('title', '') or ''
+    summary = article.get('summary', '') or ''
+    text = f"{title}. {summary}".strip()
+    if not text or text == '.':
+        return 'Uncategorized', 0.0, [], 'news'
 
     model, cat_embs = _get_embedding_model()
     if model is None:
