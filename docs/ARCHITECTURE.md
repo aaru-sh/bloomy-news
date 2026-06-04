@@ -1,6 +1,6 @@
 ﻿# Architecture
 
-This document is the deep technical reference for how Bloomy News works. For a quick overview, see the [README](../README.md#how-it-works).
+This document is the deep technical reference for how Bloomy News works. For a friendly overview, start at the [README](../README.md#learn-more).
 
 ## System overview
 
@@ -278,4 +278,4 @@ The pipeline is intentionally I/O-bound, not CPU-bound. If you need to scale it,
 - [SCRAPERS.md](SCRAPERS.md) — how to add a new scraper
 - [CLASSIFIER.md](CLASSIFIER.md) — classification algorithm details
 - [DEDUP.md](DEDUP.md) — deduplication strategy details
-- [README.md](../README.md#how-it-works) — high-level overview
+- [README.md](../README.md) — high-level overview
