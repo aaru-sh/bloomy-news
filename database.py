@@ -35,7 +35,6 @@ def init_db():
             categories TEXT DEFAULT '[]',
             confidence REAL DEFAULT 0.0,
             is_read INTEGER DEFAULT 0,
-            is_starred INTEGER DEFAULT 0,
             embedding BLOB,
             created_at TEXT DEFAULT (datetime('now'))
         );
@@ -92,6 +91,21 @@ def init_db():
             END
         """)
         conn.commit()
+    except Exception:
+        pass
+
+    try:
+        null_rows = conn.execute(
+            "SELECT id, title FROM articles WHERE title_words IS NULL OR title_words = ''"
+        ).fetchall()
+        if null_rows:
+            for row in null_rows:
+                words = extract_title_words(row['title'] or '')
+                conn.execute(
+                    "UPDATE articles SET title_words = ? WHERE id = ?",
+                    (words, row['id']),
+                )
+            conn.commit()
     except Exception:
         pass
 
@@ -326,19 +340,6 @@ def count_articles_today_by_category():
             GROUP BY category
         """).fetchall()
         return {r["category"]: r["cnt"] for r in rows}
-    finally:
-        conn.close()
-
-def mark_starred(id):
-    conn = get_connection()
-    try:
-        row = conn.execute("SELECT is_starred FROM articles WHERE id = ?", (id,)).fetchone()
-        if row:
-            new_val = 0 if row['is_starred'] else 1
-            conn.execute("UPDATE articles SET is_starred = ? WHERE id = ?", (new_val, id))
-            conn.commit()
-            return new_val
-        return None
     finally:
         conn.close()
 
