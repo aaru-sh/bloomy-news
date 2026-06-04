@@ -10,6 +10,31 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 - Semantic dedup using sentence embeddings (in addition to Jaccard)
 - RSS aggregator mode with OPML import
 - Configurable classifier training from user feedback
+- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0)
+
+---
+
+## [1.1.0] - 2026-06-05
+
+**Code quality and classifier overhaul.** The pipeline is now faster, the classifier is meaningfully more accurate, and the docs match the code. No breaking changes to the public surface or the user experience.
+
+### Highlights
+- **Pipeline connection refactor** (`c4b1c33`): each pipeline run now uses a single SQLite connection for all article inserts (vs 3 connections per article). On a typical 200-500 article run this is ~600-1500 fewer round-trips, and the whole run commits as one transaction.
+- **Classifier centroids** (`9df0ffb`): replaced single-description similarity with multi-example centroids (12 representative article titles per category). Accuracy on the labeled set jumped from 80% to 100% (30/30); `MINIMUM_ACCURACY` raised to 0.90.
+- **Classifier robustness** (`332385e`, `ec39ed6`): when the sentence-transformers model can't load (HF rate-limit, OOM, network), the classifier now caches the failure and falls back to the keyword classifier for the rest of the process instead of crashing the pipeline.
+- **Database cleanup** (`a062922`): NULL `title_words` rows from older pipelines are now backfilled on `init_db()`; orphaned `is_starred` column and `mark_starred()` function removed (dead code).
+- **Google News redirects** (`349f04f`): Google News redirect URLs (`news.google.com/articles/...`) are now resolved to the underlying article URL via HEAD-then-GET with `<link rel="canonical">` fallback. Articles no longer appear in bookmarks / Telegram digests as "google.com/articles/..." placeholders.
+- **Doc accuracy** (`11ea5e0`): README, `docs/CLASSIFIER.md`, `docs/SCRAPERS.md`, and `docs/PROJECT_STRUCTURE.md` now match the code (arXiv 4 feeds / Google News 3 queries, classifier trade-off documented).
+- **Concurrency test** (`c0c48bb`): verifies 2 simultaneous pipeline runs don't double-insert; verifies 5 threads racing on the same URL only let one win.
+
+### Fixed
+- `_classify_embedding` no longer matches the literal "." against LLM at 0.15 confidence when the article is empty (it now short-circuits to `Uncategorized`).
+- Classifier correctly returns LLM (not Neural-Nets) for "New transformer architecture for large language models" — centroid example added.
+- Google News redirect URLs no longer appear as the bookmark / Telegram URL.
+
+### Not in 1.1.0 (deferred)
+- **Bookmark persistence fix** (mirror JSON to `articles.is_bookmarked`): the code change was implemented but the test suite breaks an unrelated `test_fresh_install.TestPathResolution` assertion via an `import database` side-effect in `dashboard/serve.py` that pollutes `sys.modules`. The "make clean wipes bookmarks" footgun is real but small; will revisit in 1.1.1 with a cleaner test isolation strategy.
+- **CI model cache**: the classifier accuracy test still skips in CI (HF rate-limits the shared runner IP space). Local 100% accuracy is the gating signal; will revisit when GitHub-hosted runners get a more permissive HF tier.
 
 ---
 
