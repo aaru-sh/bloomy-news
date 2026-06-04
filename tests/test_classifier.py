@@ -28,7 +28,7 @@ from news_tool import classify_article, EMBEDDING_AVAILABLE
 LABELED_SAMPLES = [
     # LLM
     ("GPT-4 outperforms humans on legal bar exam", "", "LLM"),
-    ("Anthropic launches Claude API for enterprise customers", "", "LLM"),
+    ("Anthropic launches Claude API for enterprise customers", "", "AI-Applications"),
     ("Llama 3 fine-tuning guide for instruction following", "", "LLM"),
     ("Mistral releases new open-source 7B model with strong reasoning", "", "LLM"),
     ("Prompt engineering techniques for GPT-5", "", "LLM"),
@@ -65,7 +65,7 @@ LABELED_SAMPLES = [
     ("New deep learning approach for image recognition", "", "Neural-Nets"),
 ]
 
-MINIMUM_ACCURACY = 0.80
+MINIMUM_ACCURACY = 0.90
 
 
 class TestClassifierAccuracy(unittest.TestCase):
