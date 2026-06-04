@@ -36,8 +36,9 @@ git clone https://github.com/aaru-sh/bloomy-news
 cd bloomy-news
 pip install -r requirements.txt          # or: pip install -e .
 python scripts/smoke_test.py             # verify your machine
-LAUNCH_DAILY.bat                         # Windows
-# or: ./launch_daily.sh                  # Linux / macOS
+python news_tool.py                      # run the pipeline
+python dashboard/generate_data.py        # regenerate the dashboard data
+python dashboard/serve.py                # start the server on :8080
 ```
 
 Then open <http://127.0.0.1:8080>.
