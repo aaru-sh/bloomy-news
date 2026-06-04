@@ -1,17 +1,22 @@
 ﻿#!/usr/bin/env python3
-"""Telegram Bot - Posts daily digest with inline keyboards to channel and sub-channels."""
+"""Telegram Bot - Posts daily digest with inline keyboards to channel and sub-channels.
+
+All SQLite access goes through database.py so the schema, dedup, and stats
+behaviour stay in one place. This script adds the Telegram-specific bit:
+message formatting, the Bot API call, and per-category channel posting.
+"""
 import json
 import html
-import re
 import sys
 import time
-import sqlite3
 import requests
 from pathlib import Path
 from datetime import date
 
 BASE = Path(__file__).parent.parent.resolve()
-DB_PATH = BASE / "news.db"
+sys.path.insert(0, str(BASE))
+import database  # noqa: E402
+
 CONFIG_PATH = BASE / "config" / "telegram.json"
 LOG_DIR = BASE / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -37,22 +42,33 @@ EMOJIS = {
 }
 
 
-def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def load_config():
     if not CONFIG_PATH.exists():
-        print("Telegram config not found. Skipping.")
+        _log("  Telegram config not found. Skipping.")
         return None
     with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
         config = json.load(f)
     if config.get("bot_token", "").startswith("YOUR_"):
-        print("Telegram bot_token not configured. Skipping.")
+        _log("  Telegram bot_token not configured. Skipping.")
         return None
     return config
+
+
+def get_articles_by_category(category, limit=5):
+    """Today's articles for a category, ordered by published date desc."""
+    today = date.today().isoformat()
+    return database.get_articles(
+        category=category,
+        date_from=today,
+        date_to=today,
+        limit=limit,
+    )
+
+
+def get_today_counts():
+    """{category: count} of articles published today, across all 6 categories."""
+    raw = database.count_articles_today_by_category()
+    return {cat: raw.get(cat, 0) for cat in CATEGORIES}
 
 
 def clean_text(text):
@@ -90,9 +106,9 @@ def send_message(token, chat_id, text, reply_markup=None):
             result = r.json()
             if result.get("ok"):
                 return True
-            print(f"  Telegram error: {result.get('description', 'unknown')}")
+            _log(f"  Telegram error: {result.get('description', 'unknown')}")
         except Exception as e:
-            print(f"  Telegram request failed: {e}")
+            _log(f"  Telegram request failed: {e}")
         if attempt == 0:
             time.sleep(RETRY_DELAY)
     return False
@@ -121,35 +137,6 @@ def send_long_message(token, chat_id, text, reply_markup=None):
         if not send_message(token, chat_id, part, extra):
             return False
     return True
-
-
-def get_articles_by_category(conn, category, limit=5):
-    rows = conn.execute("""
-        SELECT * FROM articles
-        WHERE category = ? AND date(published) = date('now')
-        ORDER BY published DESC
-        LIMIT ?
-    """, (category, limit)).fetchall()
-    return [dict(row) for row in rows]
-
-
-def get_today_counts(conn):
-    counts = {}
-    for cat in CATEGORIES:
-        row = conn.execute(
-            "SELECT COUNT(*) as cnt FROM articles WHERE category = ? AND date(published) = date('now')",
-            (cat,)
-        ).fetchone()
-        counts[cat] = row["cnt"] if row else 0
-    return counts
-
-
-def mark_articles_read(conn, article_ids):
-    if not article_ids:
-        return
-    placeholders = ",".join("?" * len(article_ids))
-    conn.execute(f"UPDATE articles SET is_read = 1 WHERE id IN ({placeholders})", article_ids)
-    conn.commit()
 
 
 def format_main_digest(articles_by_category, today_counts):
@@ -216,15 +203,6 @@ def build_article_keyboard(articles):
     return {"inline_keyboard": keyboard} if keyboard else None
 
 
-def get_channel_id_from_config(category):
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
-            config = json.load(f)
-        return config.get("category_channels", {}).get(category, "")
-    except Exception:
-        return ""
-
-
 def format_channel_links(config):
     lines = []
     lines.append("\U0001f4cc <b>Category Channels:</b>")
@@ -243,13 +221,13 @@ def post_to_category_channels(token, category_channels, articles_by_category):
         if not articles:
             continue
         emoji = EMOJIS.get(cat, "\U0001f4f0")
-        print(f"  Posting {len(articles)} articles to {cat}...")
+        _log(f"  Posting {len(articles)} articles to {cat}...")
         text = format_category_post(cat, articles[:5])
         kb = build_article_keyboard(articles[:5])
         if send_message(token, channel_id, text, kb):
             posted_ids.extend(a["id"] for a in articles[:5])
         else:
-            print(f"  Failed to post to {cat} channel, continuing...")
+            _log(f"  Failed to post to {cat} channel, continuing...")
     return posted_ids
 
 
@@ -263,37 +241,35 @@ def post_daily_digest():
     category_channels = config.get("category_channels", {})
 
     if not main_channel:
-        print("No main channel configured. Skipping.")
+        _log("  No main channel configured. Skipping.")
         return
 
-    print("Telegram Bot - Posting daily digest...")
+    _log("Telegram Bot - Posting daily digest...")
 
-    conn = get_db()
-    articles_by_category = {}
-    for cat in CATEGORIES:
-        articles_by_category[cat] = get_articles_by_category(conn, cat, limit=5)
-
-    today_counts = get_today_counts(conn)
+    articles_by_category = {
+        cat: get_articles_by_category(cat, limit=5) for cat in CATEGORIES
+    }
+    today_counts = get_today_counts()
     total = sum(len(v) for v in articles_by_category.values())
 
     if total == 0:
-        print("  No articles today. Skipping.")
-        conn.close()
+        _log("  No articles today. Skipping.")
         return
 
-    print(f"  Sending digest with {total} articles...")
+    _log(f"  Sending digest with {total} articles...")
     digest_text = format_main_digest(articles_by_category, today_counts)
     send_long_message(token, main_channel, digest_text)
 
-    print("  Posting channel links...")
+    _log("  Posting channel links...")
     links_text = format_channel_links(config)
     send_message(token, main_channel, links_text)
 
     posted_ids = post_to_category_channels(token, category_channels, articles_by_category)
-    mark_articles_read(conn, posted_ids)
+    if posted_ids:
+        updated = database.mark_read_batch(posted_ids)
+        _log(f"  Marked {updated}/{len(posted_ids)} articles as read.")
 
-    conn.close()
-    print("Telegram posting complete.")
+    _log("Telegram posting complete.")
 
 
 if __name__ == "__main__":
