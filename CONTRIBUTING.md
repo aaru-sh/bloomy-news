@@ -93,7 +93,7 @@ All 18 tests should pass. If you add a new test, add it to the appropriate class
 #### Config
 
 - **No new top-level env vars without updating `.env.example`.** Add a comment explaining what the var is for and whether it's required.
-- **Placeholder syntax in JSON** is `${VAR_NAME}`. The `secrets.py` loader expands it. Do not put real keys in tracked JSON.
+- **Placeholder syntax in JSON** is `${VAR_NAME}`. The `config.py` loader expands it. Do not put real keys in tracked JSON.
 
 ### Commit messages
 

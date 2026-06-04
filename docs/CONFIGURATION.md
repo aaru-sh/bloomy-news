@@ -68,7 +68,7 @@ settings that don't belong in env vars:
 | `config/telegram.json`   | Bot token placeholder + channel IDs (main + 6 sub-channels) |
 
 Any string value in these files can use `${VAR}` placeholder syntax,
-which is expanded at load time by `secrets.py`. For example,
+which is expanded at load time by `config.py`. For example,
 `config/telegram.json` might have:
 
 ```json

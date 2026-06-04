@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from secrets import get_telegram_token
+from config import get_telegram_token
 
 BASE = Path(__file__).parent.parent
 

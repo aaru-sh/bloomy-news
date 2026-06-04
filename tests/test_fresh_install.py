@@ -101,7 +101,7 @@ class TestFreshInstallFlow(unittest.TestCase):
             encoding="utf-8"
         )
         # Copy required .py files
-        for src in ("database.py", "secrets.py", "news_tool.py"):
+        for src in ("database.py", "config.py", "news_tool.py"):
             (self.root / src).write_text(
                 (BASE / src).read_text(encoding="utf-8"), encoding="utf-8"
             )
@@ -129,7 +129,7 @@ class TestFreshInstallFlow(unittest.TestCase):
         sys.path.insert(0, str(self.root))
         # Force reimport under the new sys.path
         for mod in list(sys.modules):
-            if mod in ("database", "secrets", "news_tool", "serve",
+            if mod in ("database", "config", "news_tool", "serve",
                        "generate_data", "scripts.telegram_bot",
                        "scripts.scheduler", "scripts.check_system"):
                 del sys.modules[mod]
@@ -156,7 +156,7 @@ class TestFreshInstallFlow(unittest.TestCase):
         """serve.py must return valid JSON when dashboard_data.json is missing."""
         sys.path.insert(0, str(self.root))
         for mod in list(sys.modules):
-            if mod in ("database", "secrets", "news_tool", "serve",
+            if mod in ("database", "config", "news_tool", "serve",
                        "generate_data", "scripts.telegram_bot",
                        "scripts.scheduler", "scripts.check_system"):
                 del sys.modules[mod]
