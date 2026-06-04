@@ -663,26 +663,35 @@ def main():
     
     print("\nPHASE 2: CLASSIFY & STORE")
     print("-" * 40)
-    
+
     categorized = defaultdict(list)
     new_count = dup_count = 0
-    
-    for article in all_articles:
-        category, confidence, tags, subcategory = classify_article(article)
-        article['category'] = category
-        article['confidence'] = confidence
-        article['tags'] = tags
-        article['subcategory'] = subcategory
-        
-        is_new, article_id = database.store_article(article)
-        if is_new:
-            new_count += 1
-            categorized[category].append(article)
-            logger.info(f"Stored: {article['title'][:60]} -> {category} (conf={confidence:.2f})")
-        else:
-            dup_count += 1
-            logger.info(f"Duplicate: {article['title'][:60]}")
-    
+
+    conn = database.get_connection()
+    try:
+        for article in all_articles:
+            category, confidence, tags, subcategory = classify_article(article)
+            article['category'] = category
+            article['confidence'] = confidence
+            article['tags'] = tags
+            article['subcategory'] = subcategory
+
+            is_new, article_id = database.store_article(article, conn=conn)
+            if is_new:
+                new_count += 1
+                categorized[category].append(article)
+                logger.info(f"Stored: {article['title'][:60]} -> {category} (conf={confidence:.2f})")
+            else:
+                dup_count += 1
+                logger.info(f"Duplicate: {article['title'][:60]}")
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
     print(f"  New: {new_count} | Duplicates: {dup_count}")
     for cat in sorted(categorized.keys()):
         print(f"  {cat}: {len(categorized[cat])}")

@@ -152,8 +152,17 @@ def title_similarity(title1, title2):
     union = words1 | words2
     return len(intersection) / len(union)
 
-def is_duplicate(title, url, summary=''):
-    conn = get_connection()
+def is_duplicate(title, url, summary='', conn=None):
+    """Check whether the given article is a duplicate of one already stored.
+
+    If `conn` is provided, uses it (the caller manages the connection and
+    transaction). If `conn` is None, opens a fresh connection, runs the
+    query read-only, and closes the connection before returning. Mixing
+    the two is fine: each call is self-contained.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
     try:
         if url:
             row = conn.execute("SELECT id FROM articles WHERE url = ?", (url,)).fetchone()
@@ -183,28 +192,51 @@ def is_duplicate(title, url, summary=''):
                 return True, row['id'], sim, 'title_similarity'
         return False, None, 0.0, None
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
-def log_duplicate(content_hash, title, similar_id, score, method):
-    conn = get_connection()
+def log_duplicate(content_hash, title, similar_id, score, method, conn=None):
+    """Record a duplicate-detection event in the dedup_log table.
+
+    If `conn` is provided, uses it (caller manages commit/rollback).
+    If `conn` is None, opens a fresh connection and commits the insert
+    before closing. Use a shared conn for batch dedup logging so all
+    inserts commit (or roll back) together.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
     try:
         conn.execute("""
             INSERT INTO dedup_log (content_hash, title, similar_to_id, similarity_score, method)
             VALUES (?, ?, ?, ?, ?)
         """, (content_hash, title, similar_id, score, method))
-        conn.commit()
+        if own_conn:
+            conn.commit()
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
-def store_article(article):
-    conn = get_connection()
+def store_article(article, conn=None):
+    """Insert an article if it's not a duplicate.
+
+    If `conn` is provided, uses it (caller manages commit/rollback). The
+    internal calls to is_duplicate() and log_duplicate() reuse the same
+    conn so all DB work for one article happens in one transaction.
+
+    If `conn` is None, opens a fresh connection, commits the insert (or
+    rollback on error), and closes before returning.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
     try:
         title = article.get('title', '')
         url = article.get('url', '')
         summary = article.get('summary', '')
-        is_dup, similar_id, score, method = is_duplicate(title, url, summary)
+        is_dup, similar_id, score, method = is_duplicate(title, url, summary, conn=conn)
         if is_dup:
-            log_duplicate(compute_hash(article), title, similar_id, score, method)
+            log_duplicate(compute_hash(article), title, similar_id, score, method, conn=conn)
             return False, similar_id
         arxiv_id = parse_arxiv_id(url) or ''
         title_words = extract_title_words(title)
@@ -227,14 +259,17 @@ def store_article(article):
             categories,
             article.get('confidence', 0.0)
         ))
-        conn.commit()
+        if own_conn:
+            conn.commit()
         article_id = cursor.lastrowid
         return True, article_id
     except Exception as e:
-        conn.rollback()
+        if own_conn:
+            conn.rollback()
         return False, None
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 def _fts_search_ids(conn, query, limit=500):
     """Run FTS5 search; return list of rowids or [] on any failure.
