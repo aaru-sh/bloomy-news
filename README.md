@@ -158,6 +158,16 @@ python dashboard/serve.py
 
 Open `http://127.0.0.1:8080` in your browser.
 
+### Verify your install (optional but recommended)
+
+```bash
+python scripts/smoke_test.py
+# or:
+make smoke
+```
+
+Runs 10 self-contained checks (Python version, deps, config files, no hardcoded paths, database init, server start, classifier, secrets precedence) and prints clear `[OK]` / `[FAIL]` lines with remediation hints. Exits 0 on success, 1 on failure. This is the first command to run when something looks off — it never touches your real `news.db`.
+
 ---
 
 ## Configuration
@@ -359,7 +369,7 @@ The `news.db` file is the source of truth at runtime. The `.md.gz` archives are 
 Bloomy-news/
 ├── LAUNCH_DAILY.bat            one-shot health+server+pipeline+regen (Windows)
 ├── launch_daily.sh             same as above, for Linux / macOS
-├── Makefile                    `make run|test|install|clean` shortcuts (cross-platform)
+├── Makefile                    `make run|test|smoke|install|clean` shortcuts (cross-platform)
 ├── news_tool.py                pipeline: 8 scrapers, classifier, dedup, telegram poster
 ├── database.py                 SQLite layer: articles, dedup_log, FTS5, Jaccard
 ├── secrets.py                  env + config loader with ${VAR} expansion
@@ -376,6 +386,7 @@ Bloomy-news/
 ├── scripts/
 │   ├── check_system.py         health check (Python version, deps, .env, news.db)
 │   ├── scheduler.py            12h background loop with catch-up (registry autostart on Windows)
+│   ├── smoke_test.py           10-check fresh-install verifier (user-facing, no test runner)
 │   └── telegram_bot.py         daily digest poster (top 3 per category)
 │
 ├── dashboard/
@@ -437,6 +448,8 @@ make test
 - Bookmark API input limits — body cap, bookmark cap
 - Scheduler state machine — catch-up at no-state / old-state / recent-state, next-checkpoint calc
 - **Fresh-install** — all 5 module paths derive from `__file__` (no hardcoded `E:\`); `init_db()` creates the schema at the project root; `serve.py` returns valid empty JSON when `dashboard_data.json` is missing; the bookmark API accepts/validates IDs end-to-end over a real HTTP server.
+
+For a user-facing health check (no test runner required), see `python scripts/smoke_test.py` (`make smoke`) — it's the same idea as the fresh-install test, but packaged as a single command for end users.
 
 ### Common tasks (Makefile)
 

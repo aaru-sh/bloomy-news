@@ -16,12 +16,13 @@ else
     LAUNCHER := ./launch_daily.sh
 endif
 
-.PHONY: help install test test-all run pipeline server scheduler-install scheduler-uninstall scheduler-status scheduler-run clean clean-data
+.PHONY: help install test test-all smoke run pipeline server scheduler-install scheduler-uninstall scheduler-status scheduler-run clean clean-data
 
 help:
 	@echo "Bloomy News - common tasks"
 	@echo "  make install              Install Python dependencies"
 	@echo "  make test                 Run the test suite"
+	@echo "  make smoke                Run the fresh-install smoke test (10 checks)"
 	@echo "  make pipeline             Run the news pipeline once"
 	@echo "  make server               Start the dashboard server (foreground)"
 	@echo "  make run                  Launch the full daily flow ($(LAUNCHER))"
@@ -39,6 +40,9 @@ test:
 	$(PYTHON) -m unittest discover -s tests -v
 
 test-all: test
+
+smoke:
+	$(PYTHON) scripts/smoke_test.py
 
 pipeline:
 	$(PYTHON) news_tool.py
