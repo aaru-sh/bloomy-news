@@ -14,40 +14,19 @@ itself twice a day on your own machine.
 
 ---
 
-## What you get
-
-- **8 scrapers** — arXiv (13 feeds), GitHub trending, NewsAPI, cybersecurity
-  blogs, Finnhub, Google News, and market data
-- **6 categories** — LLM, Neural Nets, ML Research, AI Applications,
-  Finance, Cybersecurity
-- **3-page dashboard** at <http://127.0.0.1:8080> — landing, filters,
-  bookmarks. Dark / light theme, keyboard-navigable, screen-reader
-  friendly.
-- **Telegram digest** — top 3 articles per category, twice a day,
-  with inline buttons
-- **Smart dedup** — arXiv version tracking + Jaccard title similarity
-  (≥0.80) so the same paper / story posted twice counts once
-- **Runs itself** — 12-hour scheduler with catch-up if your laptop
-  was asleep at the scheduled time
-- **One external dep** — `requests`. Everything else is the Python
-  standard library
-
-**No cloud. No accounts. No telemetry.** Your data stays on your
-machine, and the dashboard is only reachable on `127.0.0.1`.
-
----
-
 ## Quick start
 
 You need **Python 3.8 or newer** and `git`. That's it.
 
-### Install (Windows PowerShell)
+### Install
+
+**Windows PowerShell:**
 
 ```powershell
 git clone https://github.com/aaru-sh/bloomy-news.git; Set-Location bloomy-news; pip install -r requirements.txt; python scripts/smoke_test.py
 ```
 
-### Install (bash / zsh / WSL / macOS / Git Bash)
+**bash / zsh / WSL / macOS / Git Bash:**
 
 ```bash
 git clone https://github.com/aaru-sh/bloomy-news.git && cd bloomy-news && pip install -r requirements.txt && python scripts/smoke_test.py
@@ -69,53 +48,9 @@ python news_tool.py; python dashboard/generate_data.py; python dashboard/serve.p
 python news_tool.py && python dashboard/generate_data.py && python dashboard/serve.py
 ```
 
-The server runs in the foreground. Open <http://127.0.0.1:8080> in
-your browser. Press `Ctrl+C` to stop the server.
+Open <http://127.0.0.1:8080> in your browser. Press `Ctrl+C` to stop the server.
 
-The first run creates `news.db` and the per-category archive
-folders. Subsequent runs are idempotent — running the pipeline
-twice in a row won't add duplicates.
-
----
-
-## Optional: enable more scrapers
-
-The pipeline works on **zero API keys**. To unlock the optional
-scrapers, copy `.env.example` to `.env` and fill in the ones you
-have. Missing keys are skipped silently.
-
-| Key | Source        | Free tier        | Get it at                        |
-| --- | ------------- | ---------------- | -------------------------------- |
-| `NEWS_API_KEY`     | NewsAPI     | 100 req / day   | <https://newsapi.org>            |
-| `FINNHUB_API_KEY`  | Finnhub     | 60 req / min    | <https://finnhub.io>             |
-| `TELEGRAM_BOT_TOKEN` | Telegram  | free            | <https://t.me/BotFather>         |
-
-For the full env var table, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
-For Telegram channel setup, see [docs/DEPLOYMENT.md#telegram-setup](docs/DEPLOYMENT.md#telegram-setup).
-
----
-
-## Running it on a schedule
-
-The included scheduler runs the pipeline at 12 AM and 12 PM local time
-and catches up if your machine was off at the scheduled time.
-
-**Foreground loop** (any platform, Ctrl+C to stop):
-
-```bash
-python scripts/scheduler.py
-```
-
-**Windows autostart** (registers a registry entry that runs on every
-login):
-
-```bash
-python scripts/scheduler.py --install
-```
-
-**Linux / macOS autostart** — wrap the foreground loop with `systemd`,
-`cron`, or `launchd`. Examples in
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+The first run creates `news.db` and the per-category archive folders. Subsequent runs are idempotent — running the pipeline twice in a row won't add duplicates. The pipeline works on **zero API keys**; see below to enable more scrapers.
 
 ---
 
@@ -134,72 +69,738 @@ bloomy-news/
 │   └── check_system.py   # health check
 ├── tests/                # 30 unit tests
 ├── config/               # source URLs, category keywords, telegram channels
-├── docs/                 # deep technical docs (see "Learn more" below)
+├── docs/                 # deep technical docs
 ├── .env.example          # template for the 3 optional API keys
 ├── pyproject.toml
 └── requirements.txt
 ```
 
-For the full file tree, see [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md).
+<details>
+<summary><strong>What it does — the full feature list</strong></summary>
 
----
+- **8 scrapers** — arXiv (13 RSS feeds), GitHub trending, NewsAPI,
+  dedicated cybersecurity feeds (SecurityWeek, Krebs, Hacker News,
+  BleepingComputer, AWS/GCP/Azure security blogs), Finnhub finance
+  news, Google News (14 query feeds), and Markets.
+- **6-category classifier** — LLM, Neural Nets, ML Research, AI
+  Applications, Finance, Cybersecurity — with arXiv subject as a
+  strong prior, multi-tag output, and a graceful "Uncategorized"
+  fallback when no keyword matches.
+- **Two-layer deduplication** — Jaccard title similarity (≥0.80) for
+  general articles + arXiv version tracking (v1/v2/v3 of the same
+  paper collapse to one entry).
+- **SQLite primary store** with WAL mode, FTS5 full-text index, and
+  atomic writes. Filesystem archive of compressed `.md.gz` files
+  per category for historical articles.
+- **3-page dashboard** at `http://127.0.0.1:8080` — landing (hero +
+  category grid + recent), filters (calendar + search + multi-select
+  dropdowns), bookmarks (starred articles, GitHub-starred style).
+- **Dark / light theme** persisted in `localStorage`, WCAG-AA
+  contrast ratios, full keyboard navigation, screen-reader
+  landmarks.
+- **Bookmarks with star buttons** on every article card and in the
+  side panel, persisted server-side with input validation (ID
+  pattern, 1 KB body cap, 5K bookmark cap).
+- **Telegram digest** — top 3 articles per category (18 max) to the
+  main channel; inline buttons to open the source and save to
+  bookmarks.
+- **12-hour scheduler** with smart catch-up — if the laptop was
+  off at 12:00, the next run happens at startup (after a 60s delay),
+  not at the next checkpoint.
+- **Zero external services** beyond the free-tier APIs and
+  Telegram. No database server, no Redis, no Docker, no cloud
+  function.
 
-## Learn more
+**No cloud. No accounts. No telemetry.** Your data stays on your
+machine, and the dashboard is only reachable on `127.0.0.1`.
 
-| If you want to…                                 | Read this                                          |
-| ----------------------------------------------- | -------------------------------------------------- |
-| Understand the architecture                     | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)       |
-| Add a new scraper                               | [docs/SCRAPERS.md](docs/SCRAPERS.md)               |
-| Tune the classifier                             | [docs/CLASSIFIER.md](docs/CLASSIFIER.md)           |
-| Tweak the dedup logic                           | [docs/DEDUP.md](docs/DEDUP.md)                     |
-| See every config option                         | [docs/CONFIGURATION.md](docs/CONFIGURATION.md)     |
-| Deploy to a server or systemd                   | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)           |
-| See the full file tree                          | [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) |
-| Contribute                                      | [CONTRIBUTING.md](CONTRIBUTING.md)                 |
+</details>
 
----
+<details>
+<summary><strong>Prerequisites</strong></summary>
 
-## Troubleshooting
+- **Python 3.8+** (tested on 3.8, 3.9, 3.10, 3.11, 3.12)
+- **pip** for dependency installation
+- **git** to clone the repo
+- **Windows 10/11** for the registry-based autostart scheduler.
+  On Linux/macOS, the scheduler works as a foreground loop or can
+  be wrapped with `cron` / `systemd` / `launchd`.
+- **A Telegram bot token** (optional, but recommended) — create
+  one via [@BotFather](https://t.me/BotFather).
+- **NewsAPI key** (optional) — free tier at
+  [newsapi.org](https://newsapi.org).
+- **Finnhub key** (optional) — free tier at
+  [finnhub.io](https://finnhub.io).
+- **~50 MB disk** for the SQLite database and historical archives.
 
-- **"Skipped - no API key" everywhere** — your `.env` is missing or
-  malformed. Copy `.env.example` to `.env` and fill in the keys you
-  have. The pipeline never crashes on missing keys.
+</details>
+
+<details>
+<summary><strong>Installation — step by step (any platform)</strong></summary>
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/aaru-sh/bloomy-news.git
+cd bloomy-news
+```
+
+### 2. Install Python dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+The dependency list is intentionally minimal — only `requests`
+(used by the Telegram bot and the system health check).
+Everything else is in the Python standard library: `sqlite3`,
+`urllib.request`, `http.server`, `json`, `re`, `hashlib`, `gzip`,
+`argparse`, `subprocess`, `logging`, `pathlib`, `datetime`,
+`collections`.
+
+You can also install via `pip install -e .` (uses `pyproject.toml`);
+behavior is identical.
+
+### 3. Configure secrets (optional)
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in any of the three optional keys:
+
+```bash
+TELEGRAM_BOT_TOKEN=123456789:ABCdef-GHIjkl_MNOpqrSTUvwxYZ
+NEWS_API_KEY=your_newsapi_key_here
+FINNHUB_API_KEY=your_finnhub_key_here
+```
+
+If a key is missing, the corresponding scraper is skipped silently.
+The pipeline never crashes on missing config.
+
+### 4. Configure Telegram channels (optional)
+
+If you want the Telegram digest, edit `config/telegram.json` and
+set the channel IDs for your own bot and channels. The format is
+the standard Telegram chat ID (`-100...` for supergroups).
+
+### 5. Run it
+
+```bash
+python news_tool.py
+python dashboard/generate_data.py
+python dashboard/serve.py
+```
+
+Open <http://127.0.0.1:8080> in your browser.
+
+### Verify your install
+
+```bash
+python scripts/smoke_test.py
+# or:
+make smoke
+```
+
+Runs 10 self-contained checks (Python version, deps, config files,
+no hardcoded paths, database init, server start, classifier,
+secrets precedence) and prints clear `[OK]` / `[FAIL]` lines with
+remediation hints. Exits 0 on success, 1 on failure. Never touches
+your real `news.db`.
+
+</details>
+
+<details>
+<summary><strong>Configuration — every option in one place</strong></summary>
+
+All configuration is environment-driven. The order of precedence is:
+
+1. Real environment variables (highest)
+2. `.env` file in the project root
+3. `config/*.json` files with `${VAR}` placeholder expansion
+4. Built-in defaults (lowest)
+
+### Environment variables
+
+| Variable               | Required | Default       | Used by                                  |
+| ---------------------- | -------- | ------------- | ---------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`   | no       | _placeholder_ | `scripts/telegram_bot.py`                |
+| `TELEGRAM_CHAT_ID`     | no       | _placeholder_ | `scripts/telegram_bot.py`                |
+| `NEWS_API_KEY`         | no       | _placeholder_ | `news_tool.py` (NewsAPI scraper)         |
+| `FINNHUB_API_KEY`      | no       | _placeholder_ | `news_tool.py` (Finnhub scraper)         |
+| `ARXIV_RATE_LIMIT`     | no       | `3.0`         | `news_tool.py` (seconds between requests) |
+| `LOG_LEVEL`            | no       | `INFO`        | All scripts                              |
+| `HTTP_PROXY`           | no       | _none_        | All `urllib` / `requests` calls          |
+| `HTTPS_PROXY`          | no       | _none_        | All `urllib` / `requests` calls          |
+
+### Config files
+
+Three JSON files in `config/` carry the per-source and per-channel
+settings that don't belong in env vars:
+
+| File                     | What it holds                                              |
+| ------------------------ | ---------------------------------------------------------- |
+| `config/sources.json`    | All feed URLs, API endpoints, and per-source tuning        |
+| `config/categories.json` | The category keyword tables used by the classifier         |
+| `config/telegram.json`   | Bot token placeholder + channel IDs (main + 6 sub-channels) |
+
+Any string value in these files can use `${VAR}` placeholder
+syntax, expanded at load time by `secrets.py`. For example,
+`config/telegram.json` might have:
+
+```json
+{
+  "bot_token": "${TELEGRAM_BOT_TOKEN}",
+  "main_channel_id": "${TELEGRAM_MAIN_CHANNEL_ID}",
+  "sub_channels": {
+    "LLM":     "${TELEGRAM_LLM_CHANNEL_ID}",
+    "Finance": "${TELEGRAM_FINANCE_CHANNEL_ID}"
+  }
+}
+```
+
+The placeholder is never resolved with a real value into a tracked
+file — only `.env` (gitignored) carries the real value.
+
+### Adding new feeds
+
+For RSS / Atom feeds, edit `config/sources.json` and add the URL
+to the right category. For full custom scrapers (JSON API that
+needs parsing), see [docs/SCRAPERS.md](docs/SCRAPERS.md).
+
+For Telegram sub-channels, add a new `TELEGRAM_<NAME>_CHANNEL_ID`
+entry to `.env` and reference it in `config/telegram.json`.
+
+For new classification keywords, edit `config/categories.json`.
+The keyword format and scoring rules are in
+[docs/CLASSIFIER.md](docs/CLASSIFIER.md).
+
+</details>
+
+<details>
+<summary><strong>Usage — every command and API endpoint</strong></summary>
+
+### Run the pipeline manually
+
+```bash
+python news_tool.py
+```
+
+Output looks like:
+
+```
+[1/8] arXiv (13 feeds)...
+  -> 47 new articles
+[2/8] GitHub...
+  -> 3 new articles
+[3/8] NewsAPI... (skipped - no API key)
+[4/8] Cybersecurity...
+  -> 12 new articles
+[5/8] Finance...
+  -> 8 new articles
+[6/8] Tech...
+  -> 0 new articles
+[7/8] Google News (14 feeds)...
+  -> 31 new articles
+[8/8] Markets...
+  -> 5 new articles
+Classification: 106 articles, 8 Uncategorized
+
+Pipeline complete. 106 articles added, 21 duplicates suppressed.
+Telegram digest sent to 7 channels.
+```
+
+### Run the dashboard server
+
+```bash
+python dashboard/serve.py
+```
+
+Server output (one log line per error, otherwise silent):
+
+```
+Serving on http://127.0.0.1:8080
+```
+
+### Scheduler commands
+
+```bash
+python scripts/scheduler.py --install    # one-time: register HKCU\...\Run\BloomyScheduler
+python scripts/scheduler.py --status     # show last-run state
+python scripts/scheduler.py --run-now    # run pipeline once and exit
+python scripts/scheduler.py              # foreground loop (Ctrl+C to stop)
+python scripts/scheduler.py --uninstall  # remove registry entry
+```
+
+### Dashboard API endpoints
+
+All endpoints return JSON. All error responses use 4xx with a JSON
+body.
+
+| Method | Path                       | Description                              |
+| ------ | -------------------------- | ---------------------------------------- |
+| GET    | `/api/articles`            | List articles, supports `?limit=N`       |
+| GET    | `/api/bookmarks`           | List bookmarked article IDs              |
+| POST   | `/api/bookmarks/toggle`    | Toggle bookmark for `{id: "..."}`        |
+| GET    | `/api/stats`               | Per-category counts + total article count |
+
+</details>
+
+<details>
+<summary><strong>How it works — the pipeline, classification, and dedup</strong></summary>
+
+### The pipeline, step by step
+
+```
+                 scripts/scheduler.py
+                 (background loop, 12h cadence)
+                            |
+                            v
+                  news_tool.py (pipeline)
+                  ┌─────────┴─────────┐
+                  v                   v
+            8 scrapers         classify_article
+            (parallel-ish,      (keyword match
+             sequential)        with arXiv prior
+                  │              + multi-tag)
+                  └─────────┬─────────┘
+                            v
+                       database.py
+                       (SQLite: articles, dedup_log,
+                        FTS5, Jaccard title sim,
+                        arXiv version dedup,
+                        WAL mode, atomic writes)
+                            │
+                  ┌─────────┴─────────┐
+                  v                   v
+         dashboard/generate_data.py   scripts/telegram_bot.py
+         (DB-primary, FS-fallback     (top 3 per category
+          for historical)             to sub-channels)
+                  │
+                  v
+         dashboard/data/dashboard_data.json
+                  │
+                  v
+         dashboard/serve.py  ──>  http://127.0.0.1:8080
+                  │
+                  ├── index.html      (landing: hero + category cards + recent)
+                  ├── filters.html    (calendar + search + multi-select dropdowns)
+                  └── bookmarks.html  (starred articles)
+```
+
+### Classification
+
+`classify_article(title, summary, source=None, arxiv_category=None)`
+returns `(category, confidence, tags, subcategory)`.
+
+The algorithm is keyword scoring with a strong prior:
+
+1. If the source is arXiv, the arXiv subject category (`cs.CL`,
+   `cs.LG`, `q-fin.ST`, etc.) is mapped to one of the 6 categories
+   with high confidence (≥0.9) and used as the primary signal.
+2. Otherwise, every word in the title and summary is scored
+   against `CATEGORY_KEYWORDS` in `news_tool.py`. Each match is
+   weighted by where it appears (title vs. body) and how specific
+   the keyword is.
+3. The top-scoring category wins. If no keyword matches above the
+   threshold, the article is labeled `"Uncategorized"` (confidence
+   0.0) instead of being forced into a category.
+4. All keywords that matched (across all categories) are returned
+   as a tag list, capped at 5.
+
+For the full keyword table and weighting details, see
+[docs/CLASSIFIER.md](docs/CLASSIFIER.md).
+
+### Deduplication
+
+Two layers, both in `database.py`:
+
+1. **arXiv version dedup** — arXiv papers have versioned IDs
+   (e.g., `2401.12345v2`). Versions are stripped at ingestion
+   time, so the same paper posted 3 times with different versions
+   is recorded once. Implemented in `_normalize_arxiv_id()`.
+2. **Jaccard title similarity** — for every incoming article, the
+   most recent 200 titles in the same category are compared via
+   word-set Jaccard similarity. If any match exceeds 0.80, the
+   article is rejected as a duplicate. Implemented in
+   `is_duplicate_title()` and backed by `dedup_log` for
+   performance.
+
+For edge cases (substring matches, common words, punctuation),
+see [docs/DEDUP.md](docs/DEDUP.md).
+
+### Scheduler state machine
+
+The scheduler tracks two pieces of state in `.last_run` (atomic
+JSON write):
+
+```json
+{
+  "last_run": "2026-06-04T12:00:01",
+  "last_status": "ok"
+}
+```
+
+On startup:
+
+- No state file → run now (catch-up), then schedule
+- State >12h old → run now (catch-up), then schedule
+- State <12h old → wait for the next 12 AM / 12 PM checkpoint
+
+The two checkpoint hours are `(0, 12)` — midnight and noon local
+time. This is configurable at the top of `scripts/scheduler.py`.
+
+### Storage layout
+
+Two-tier, write-both, read-DB-first:
+
+- **SQLite** (`news.db`, WAL mode) — primary store. Holds
+  `articles`, `dedup_log`, and an FTS5 virtual table for full-text
+  search. `generate_data.py` reads from here.
+- **Filesystem** (`<Category>/<YYYY-MM-DD>/<slug>.md.gz`) —
+  historical archive. `generate_data.py` walks these only for
+  articles missing from the DB (e.g., before a DB migration or
+  for snapshots).
+
+The `news.db` file is the source of truth at runtime. The
+`.md.gz` archives are a debuggable, gitignoreable history.
+
+</details>
+
+<details>
+<summary><strong>Project structure — the full file tree</strong></summary>
+
+```
+bloomy-news/
+├── .env.example                template for the 3 optional API keys
+├── .github/                    GitHub templates + CI
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.md
+│   │   ├── feature_request.md
+│   │   └── config.yml         disables blank issues, links to Discussions
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── workflows/
+│   │   └── test.yml           CI: unit + smoke on Python 3.8 – 3.12
+│   └── dependabot.yml         weekly pip updates
+├── .gitignore
+├── CHANGELOG.md               Keep-a-Changelog
+├── CODE_OF_CONDUCT.md         Contributor Covenant 2.1
+├── CONTRIBUTING.md            bug reports, PR guidelines, code style
+├── CITATION.cff               CFF metadata for "Cite this repository"
+├── LICENSE                    MIT
+├── Makefile                   `make run|test|smoke|install|clean` shortcuts
+├── README.md                  the file you're reading
+├── RELEASE_NOTES.md           pre-formatted notes for the GitHub Release UI
+├── SECURITY.md                threat model + reporting policy
+├── pyproject.toml             PEP 621 metadata; `pip install -e .` works
+├── requirements.txt           `requests>=2.28.0` (the only external dep)
+│
+├── config/                    tracked JSON, ${VAR} placeholders only
+│   ├── categories.json        classification keyword rules
+│   ├── sources.json           API endpoints + 13 arXiv feeds + 14 Google News feeds
+│   └── telegram.json          bot placeholder + 7 channel IDs
+│
+├── dashboard/                 3-page local UI + HTTP server
+│   ├── index.html             landing: hero + category cards + recent
+│   ├── filters.html           search + calendar + multi-tag chips
+│   ├── bookmarks.html         starred articles
+│   ├── style.css              ~1628 lines, dark/light, WCAG-AA contrast
+│   ├── app.js                 landing JS (star buttons, side panel, theme)
+│   ├── app-filters.js         filter page JS (calendar, search, dropdowns)
+│   ├── app-bookmarks.js       bookmarks page JS (un-star, side panel)
+│   ├── favicon.svg
+│   ├── serve.py               local HTTP server (127.0.0.1:8080, ThreadingHTTPServer)
+│   ├── generate_data.py       DB-primary JSON builder with atomic write
+│   └── data/                  runtime-generated (gitignored except .gitkeep)
+│
+├── database.py                SQLite layer: articles, dedup_log, FTS5, Jaccard
+├── news_tool.py               pipeline: 8 scrapers, classifier, dedup, telegram poster
+├── secrets.py                 env + config loader with ${VAR} expansion
+│
+├── scripts/
+│   ├── check_system.py        health check (Python version, deps, .env, news.db)
+│   ├── scheduler.py           12h background loop with catch-up
+│   ├── smoke_test.py          10-check fresh-install verifier
+│   └── telegram_bot.py        daily digest poster (top 3 per category)
+│
+├── tests/
+│   ├── test_fixes.py          18 unit tests
+│   └── test_fresh_install.py  12 fresh-install + server smoke tests
+│
+├── docs/                      extended technical documentation
+│   ├── ARCHITECTURE.md
+│   ├── CLASSIFIER.md
+│   ├── CONFIGURATION.md
+│   ├── DEDUP.md
+│   ├── DEPLOYMENT.md
+│   ├── PROJECT_STRUCTURE.md
+│   └── SCRAPERS.md
+│
+├── logs/                      runtime logs (gitignored, .gitkeep tracked)
+│
+└── category folders (gitignored, .gitkeep tracked) — historical article archive
+    ├── LLM/
+    ├── Neural-Nets/
+    ├── ML-Research/
+    ├── AI-Applications/
+    ├── Finance/
+    └── Cybersecurity/
+```
+
+**Where to add things:**
+
+| You want to…              | Touch this file / folder                                                  |
+| ------------------------- | ------------------------------------------------------------------------- |
+| Add an RSS feed           | `config/sources.json`                                                     |
+| Add a JSON-API scraper    | `news_tool.py` (and document in `docs/SCRAPERS.md`)                       |
+| Add a category            | `news_tool.py` (CATEGORIES + CATEGORY_KEYWORDS) + `config/categories.json` + all 3 `dashboard/app*.js` |
+| Add a dashboard page      | `dashboard/<name>.html` + `dashboard/app-<name>.js` + register in `dashboard/serve.py` |
+| Add a Telegram sub-channel| `.env` (add `TELEGRAM_<NAME>_CHANNEL_ID`) + `config/telegram.json`         |
+| Add an env var            | `.env.example` + `secrets.py` (loader) + `docs/CONFIGURATION.md`          |
+| Change the 12h cadence    | `scripts/scheduler.py` (CHECKPOINT_HOURS tuple)                            |
+| Change the dedup threshold| `database.py` (JACCARD_THRESHOLD constant) + `docs/DEDUP.md`              |
+
+</details>
+
+<details>
+<summary><strong>Development — tests, Makefile, adding scrapers, code style</strong></summary>
+
+### Running tests
+
+```bash
+python -m unittest discover -s tests -v
+# or, with make:
+make test
+```
+
+30 tests cover:
+
+- `title_similarity` — Jaccard edge cases (identical, partial,
+  normalized, empty)
+- Classifier fallback — "Uncategorized" path, no false
+  AI-Applications assignment
+- ID validation — `^[a-zA-Z0-9_-]{1,64}$` pattern
+- Secrets loader — env-overrides-config precedence, `${VAR}`
+  expansion
+- Bookmark API input limits — body cap, bookmark cap
+- Scheduler state machine — catch-up at no-state / old-state /
+  recent-state, next-checkpoint calc
+- **Fresh-install** — all 5 module paths derive from `__file__`
+  (no hardcoded machine paths); `init_db()` creates the schema at
+  the project root; `serve.py` returns valid empty JSON when
+  `dashboard_data.json` is missing; the bookmark API
+  accepts/validates IDs end-to-end over a real HTTP server.
+
+For a user-facing health check (no test runner required), see
+`python scripts/smoke_test.py` (`make smoke`) — it's the same
+idea as the fresh-install test, but packaged as a single command
+for end users.
+
+CI: `.github/workflows/test.yml` runs the full 30-test suite + the
+10-check smoke test on every push and PR, across Python 3.8 – 3.12
+on Ubuntu.
+
+### Common tasks (Makefile)
+
+```bash
+make install              # pip install -r requirements.txt
+make test                 # run the test suite
+make pipeline             # run the news pipeline once
+make server               # start the dashboard server (foreground)
+make run                  # one-shot: health + server + pipeline + regen
+make scheduler-install    # install scheduler as Windows autostart
+make scheduler-uninstall  # remove scheduler autostart
+make scheduler-status     # print scheduler state
+make scheduler-run        # run the scheduler pipeline once and exit
+make clean                # delete news.db, dashboard data, .last_run
+```
+
+All targets are pure cross-platform. Override the interpreter with
+`make PYTHON=python3 ...` if `python3` isn't on your PATH.
+
+### Adding a new scraper
+
+See [docs/SCRAPERS.md](docs/SCRAPERS.md) for the full guide. Short
+version:
+
+1. Add a `scrape_<name>()` function to `news_tool.py` that returns
+   a list of article dicts with the same shape as the existing
+   scrapers.
+2. Add the call to the `run_pipeline()` orchestrator.
+3. If the scraper needs an API key, add it to `config/sources.json`
+   and `.env.example`.
+4. Add a test if the parser is non-trivial.
+
+### Adding a new category
+
+1. Add a category to `CATEGORIES` in `news_tool.py` and a keyword
+   block to `CATEGORY_KEYWORDS`.
+2. Add the category to `config/categories.json` (if you keep
+   keywords there too).
+3. Add a `catColor`, `catIcon`, and `catLabel` to each of the
+   three dashboard JS files.
+4. Add a sub-channel ID to `config/telegram.json`.
+5. Update the README's "Features" section.
+
+### Code style
+
+- **Python**: PEP 8 with 4-space indents, type hints on public
+  functions, f-strings for formatting. No external linter
+  configured — keep it simple.
+- **JavaScript**: ES5-compatible syntax (no arrow functions, no
+  `const`/`let`, no template literals) for maximum browser
+  compatibility. `var` only. `escapeHtml()` for any user-controlled
+  string before innerHTML.
+- **HTML**: semantic tags first, ARIA only where semantics fail.
+  All interactive elements get a focus-visible style.
+
+</details>
+
+<details>
+<summary><strong>Deployment — Windows, Linux, macOS, Telegram</strong></summary>
+
+### Background scheduling on Windows
+
+```bash
+python scripts/scheduler.py --install
+```
+
+This registers `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\BloomyScheduler`
+with the value:
+
+```
+C:\Path\To\pythonw.exe "C:\Path\To\bloomy-news\scripts\scheduler.py"
+```
+
+On every login, Windows starts the scheduler in the background
+(no console window, `pythonw.exe`). The scheduler then loops
+forever, running the pipeline at midnight and noon local time,
+with startup catch-up.
+
+To remove: `python scripts/scheduler.py --uninstall`.
+
+### Background scheduling on Linux / macOS
+
+The scheduler works as a foreground loop. Wrap it with your
+platform's init system:
+
+- **systemd** — create a user service that runs
+  `python scripts/scheduler.py`
+- **cron** — add
+  `0 0,12 * * * cd /path/to/bloomy-news && python news_tool.py && python dashboard/generate_data.py`
+- **launchd** — create a `LaunchAgent` plist
+
+The `scripts/scheduler.py --status` command works the same on all
+platforms.
+
+### Telegram setup
+
+1. Create a bot via [@BotFather](https://t.me/BotFather). Save the
+   token to `.env` as `TELEGRAM_BOT_TOKEN`.
+2. Create a channel, add the bot as an administrator with "post
+   messages" permission.
+3. Get the channel ID — send a message in the channel, then call
+   `https://api.telegram.org/bot<token>/getUpdates` and read the
+   `chat.id` from the response.
+4. Put the channel ID (with the `-100` prefix) into
+   `config/telegram.json` as `main_channel_id`.
+5. Run `python news_tool.py` once. The digest should post within
+   a few minutes.
+
+</details>
+
+<details>
+<summary><strong>Security — what the project does and how to report issues</strong></summary>
+
+- **Dashboard server binds `127.0.0.1`** only — not reachable from
+  your LAN.
+- **Bookmark API validates** the article ID against
+  `^[a-zA-Z0-9_-]{1,64}$`, caps request bodies at 1 KB, and caps
+  the bookmark list at 5,000 entries. All exceeded limits return
+  `400` or `413`.
+- **Atomic writes** for `bookmarks.json`,
+  `dashboard_data.json`, `.last_run`, and the SQLite WAL mode
+  guarantee no torn writes on crash.
+- **Secrets are env-only.** Real values never appear in any
+  tracked JSON or HTML file. `secrets.py` is the single reader;
+  placeholder values like `${TELEGRAM_BOT_TOKEN}` are expanded at
+  runtime.
+- **CORS is restricted** to `http://localhost:8080`. All responses
+  carry `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and
+  `Cache-Control: no-store` for API endpoints.
+- **HTML escaping** in the dashboard: all article text passes
+  through `escapeHtml()` before `innerHTML` assignment. URL fields
+  pass through `safeUrl()` which only allows `http://` and
+  `https://`.
+- **`.env` is gitignored.** A scan of every tracked file confirms
+  no real tokens, API keys, or channel IDs.
+
+If you find a security issue, please open a private advisory
+instead of a public issue. See [SECURITY.md](SECURITY.md) for the
+threat model and contact channels.
+
+</details>
+
+<details>
+<summary><strong>Troubleshooting — 6 common issues, one line each</strong></summary>
+
+- **"Skipped - no API key" everywhere** — your `.env` is missing
+  or malformed. Copy `.env.example` to `.env` and fill in the keys
+  you have. The pipeline never crashes on missing keys.
 - **Dashboard says "Failed to load articles"** — run
   `python dashboard/generate_data.py` to regenerate the data file.
-- **Scheduler says "Pipeline failed"** — check `logs/pipeline_stdout.log`.
-  Most often it's a JSON syntax error in `config/sources.json`.
+  If the file is corrupt, the server logs the JSON parse error to
+  `logs/server.log`.
+- **Scheduler says "Pipeline failed" but logs look fine** — check
+  `logs/pipeline_stdout.log` and `logs/scheduler.log`. The most
+  common cause is a `config/sources.json` syntax error after a
+  manual edit. Validate with
+  `python -c "import json; json.load(open('config/sources.json'))"`.
 - **Telegram digest doesn't post** — verify the bot token with
-  `curl https://api.telegram.org/bot<token>/getMe`, and check the
-  channel ID starts with `-100`.
-- **arXiv returns 0 articles** — arXiv rate-limits unauthenticated
-  requests occasionally. The scraper retries 3 times with backoff.
-- **Something else looks off** — run `python scripts/smoke_test.py`
-  first. It catches the common mistakes in 10 seconds.
+  `curl https://api.telegram.org/bot<token>/getMe`. Verify the bot
+  is an admin in the channel with "post messages" permission.
+  Check the channel ID — it must be a supergroup ID starting with
+  `-100`. Check `logs/pipeline_stdout.log` for the `Telegram`
+  section.
+- **arXiv scraper returns 0 articles** — arXiv occasionally
+  rate-limits unauthenticated requests. The scraper already
+  retries 3 times with exponential backoff. If you're consistently
+  rate-limited, the request will show up in `logs/pipeline.log` as
+  `HTTP 429`.
+- **Card borders look invisible on your monitor** — the card
+  border opacity (`rgba(255,255,255,0.4)`) is tuned for a typical
+  laptop screen at 100% brightness. On high-brightness HDR
+  displays it may look subtle. Edit the value in
+  `dashboard/style.css` and reload.
 
----
+If something else looks off, run `python scripts/smoke_test.py`
+first — it catches the common mistakes in 10 seconds.
 
-## Security
+</details>
 
-The dashboard binds to `127.0.0.1` only. All file writes are atomic.
-The bookmark API validates inputs (ID pattern, 1 KB body, 5K cap).
-Secrets are env-only. The HTML output is escaped. See
-[SECURITY.md](SECURITY.md) for the threat model and how to report
-issues.
-
----
-
-## Roadmap
+<details>
+<summary><strong>Roadmap — what's coming next</strong></summary>
 
 - Discord / Slack digest in addition to Telegram
-- Live dashboard updates (replace the "refresh to see new" pattern)
-- Embedding-based semantic dedup (in addition to Jaccard)
-- A "training" mode for the classifier
+- WebSocket-based live updates (replace the "refresh to see new"
+  pattern)
+- Per-user authentication for the dashboard (when run on a server
+  instead of localhost)
+- Embedding-based semantic dedup (in addition to Jaccard) for
+  better cross-language detection
+- RSS aggregator mode (read `OPML` of favorite feeds)
+- A "training" mode for the classifier — accept user corrections
+  to teach new keywords
+
+</details>
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, feature
+requests, and pull request guidelines.
 
 ## License
 
