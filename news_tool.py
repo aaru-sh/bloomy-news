@@ -385,6 +385,8 @@ except ImportError:
 
 _embedding_model = None
 _category_embeddings = None
+_embedding_load_failed = False
+_embedding_load_error = None
 
 CATEGORY_DESCRIPTIONS = {
     'LLM':             'large language model LLM generative AI chatbot assistant GPT Claude Llama Mistral Gemini PaLM '
@@ -410,22 +412,34 @@ CATEGORY_DESCRIPTIONS = {
 
 
 def _get_embedding_model():
-    global _embedding_model, _category_embeddings
-    if _embedding_model is None:
-        _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        _category_embeddings = {
-            cat: _embedding_model.encode(desc, convert_to_numpy=True)
-            for cat, desc in CATEGORY_DESCRIPTIONS.items()
-        }
+    global _embedding_model, _category_embeddings, _embedding_load_failed, _embedding_load_error
+    if _embedding_model is None and _embedding_load_failed is False:
+        try:
+            _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            _category_embeddings = {
+                cat: _embedding_model.encode(desc, convert_to_numpy=True)
+                for cat, desc in CATEGORY_DESCRIPTIONS.items()
+            }
+        except Exception as exc:
+            _embedding_load_failed = True
+            _embedding_load_error = str(exc)
+            sys.stderr.write(
+                "warning: sentence-transformers model load failed, "
+                f"falling back to keyword classifier: {exc}\n"
+            )
     return _embedding_model, _category_embeddings
 
 
 def _classify_embedding(article):
+    global EMBEDDING_AVAILABLE
     title = article.get('title', '')
     summary = article.get('summary', '')
     text = f"{title}. {summary}"
 
     model, cat_embs = _get_embedding_model()
+    if model is None:
+        EMBEDDING_AVAILABLE = False
+        return _classify_keywords(article)
     text_emb = model.encode(text, convert_to_numpy=True)
     text_norm = np.linalg.norm(text_emb)
     if text_norm == 0:
