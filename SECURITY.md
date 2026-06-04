@@ -17,7 +17,7 @@ end-of-life.
 Use one of these private channels:
 
 1. **GitHub Security Advisories** (preferred):
-   <https://github.com/OWNER/bloomy-news/security/advisories/new>
+   <https://github.com/aaru-sh/bloomy-news/security/advisories/new>
 2. **Email**: open a draft security advisory on GitHub first, and the
    maintainers will share a private contact address in the advisory thread.
 

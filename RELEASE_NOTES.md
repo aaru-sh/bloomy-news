@@ -1,7 +1,7 @@
 # Release notes — paste into the GitHub Release UI
 
 Copy everything below the line into the "Describe this release" box on
-https://github.com/OWNER/bloomy-news/releases/new?tag=v1.0.0
+https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.0.0
 
 ---
 
@@ -32,7 +32,7 @@ the first version packaged for distribution.
 ### Quick start
 
 ```bash
-git clone https://github.com/OWNER/bloomy-news
+git clone https://github.com/aaru-sh/bloomy-news
 cd bloomy-news
 pip install -r requirements.txt          # or: pip install -e .
 python scripts/smoke_test.py             # verify your machine
