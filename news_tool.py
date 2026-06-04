@@ -417,7 +417,7 @@ def post_to_telegram(categorized):
         print("  Skipping Telegram - not configured")
         return
 
-    with open(tg_path) as f:
+    with open(tg_path, encoding="utf-8-sig") as f:
         tg_config = json.load(f)
 
     token = get_telegram_token()

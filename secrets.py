@@ -55,7 +55,10 @@ def get_secret(key, config_path=None, config_key=None, default=None):
         return env_value
     if config_path and config_key:
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
+            # utf-8-sig strips a leading BOM if present, so configs that were
+            # saved by an editor that adds a BOM (e.g. some Windows tools)
+            # still load correctly.
+            with open(config_path, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
             value = data.get(config_key, '')
             value = _expand_env_placeholders(value)

@@ -47,7 +47,7 @@ def load_config():
     if not CONFIG_PATH.exists():
         print("Telegram config not found. Skipping.")
         return None
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
         config = json.load(f)
     if config.get("bot_token", "").startswith("YOUR_"):
         print("Telegram bot_token not configured. Skipping.")
@@ -218,7 +218,7 @@ def build_article_keyboard(articles):
 
 def get_channel_id_from_config(category):
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
             config = json.load(f)
         return config.get("category_channels", {}).get(category, "")
     except Exception:

@@ -1,4 +1,4 @@
-﻿{
+{
   "_comment": "Channel IDs are public. Bot token comes from .env (TELEGRAM_BOT_TOKEN).",
   "bot_token": "${TELEGRAM_BOT_TOKEN}",
   "main_channel_id": "-1003798542488",
