@@ -4,7 +4,8 @@ import hashlib
 import re
 from pathlib import Path
 
-DB_PATH = Path(r"E:\AI\Projects\News\news.db")
+BASE = Path(__file__).parent.resolve()
+DB_PATH = BASE / "news.db"
 
 def get_connection():
     conn = sqlite3.connect(str(DB_PATH))
@@ -272,7 +273,7 @@ def mark_starred(id):
     finally:
         conn.close()
 
-BOOKMARKS_FILE = Path(r"E:\AI\Projects\News\dashboard\data\bookmarks.json")
+BOOKMARKS_FILE = BASE / "dashboard" / "data" / "bookmarks.json"
 
 def get_bookmarks():
     """Get list of bookmarked article IDs."""
@@ -354,7 +355,6 @@ def get_today_top_per_category(limit_per_cat=3):
 
 def migrate_from_files():
     import gzip
-    BASE = Path(r"E:\AI\Projects\News")
     conn = get_connection()
     try:
         count = conn.execute("SELECT COUNT(*) as cnt FROM articles").fetchone()['cnt']
