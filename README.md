@@ -661,7 +661,7 @@ The `scripts/scheduler.py --status` command works the same on all platforms.
 
 - **Dashboard server binds `127.0.0.1`** only — not reachable from your LAN.
 - **Bookmark API validates** the article ID against `^[a-zA-Z0-9_-]{1,64}$`, caps request bodies at 1 KB, and caps the bookmark list at 5,000 entries. All exceeded limits return `400` or `413`.
-- **Atomic writes** for `bookmarks.json`, `dashboard_data.json`, `.last_run`, and the SQLite WAL mode guarantee no torn writes on crash.
+- **Atomic writes** for `bookmarks.json`, `dashboard_data.json`, and `.last_run` (temp-file + `os.replace`) plus SQLite WAL mode guarantee no torn writes on crash.
 - **Secrets are env-only.** Real values never appear in any tracked JSON or HTML file. `secrets.py` is the single reader; placeholder values like `${TELEGRAM_BOT_TOKEN}` are expanded at runtime.
 - **CORS is restricted** to `http://localhost:8080`. All responses carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store` for API endpoints.
 - **HTML escaping** in the dashboard: all article text passes through `escapeHtml()` before `innerHTML` assignment. URL fields pass through `safeUrl()` which only allows `http://` and `https://`.
