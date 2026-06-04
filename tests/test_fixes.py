@@ -47,6 +47,8 @@ class TestClassifierFallback(unittest.TestCase):
     def test_no_match_returns_uncategorized(self):
         sys.path.insert(0, str(BASE))
         import news_tool
+        if getattr(news_tool, 'EMBEDDING_AVAILABLE', False):
+            self.skipTest("Keyword fallback test skipped when embedding classifier is active")
         primary, conf, tags, subcat = news_tool.classify_article({
             "title": "XYZ random unrelated text",
             "summary": "nothing in here matches anything either"

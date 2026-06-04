@@ -15,7 +15,7 @@ from datetime import datetime, date
 from collections import defaultdict
 
 import database
-from secrets import get_telegram_token, get_newsapi_key, get_finnhub_key
+from config import get_telegram_token, get_newsapi_key, get_finnhub_key
 
 BASE = Path(__file__).parent.resolve()
 
@@ -387,12 +387,25 @@ _embedding_model = None
 _category_embeddings = None
 
 CATEGORY_DESCRIPTIONS = {
-    'LLM':             'large language models GPT Claude Llama Mistral transformer chatbot prompt fine-tuning RLHF',
-    'Neural-Nets':     'neural network deep learning architecture backpropagation convolutional recurrent attention mechanism',
-    'ML-Research':     'machine learning research paper algorithm optimization gradient statistical learning theory benchmark',
-    'AI-Applications': 'artificial intelligence product application tool agent automation software deployment chatbot assistant',
-    'Finance':         'stock market finance investment trading cryptocurrency bitcoin earnings revenue economic policy IPO',
-    'Cybersecurity':   'security vulnerability exploit breach malware ransomware CVE patch threat zero-day encryption',
+    'LLM':             'large language model LLM generative AI chatbot assistant GPT Claude Llama Mistral Gemini PaLM '
+                       'transformer decoder prompt fine-tuning RLHF instruction tuning chain-of-thought reasoning '
+                       'tokenization few-shot in-context learning alignment hallucination',
+    'Neural-Nets':     'neural network deep learning architecture layer activation backpropagation gradient convolutional '
+                       'recurrent LSTM GRU GAN diffusion transformer attention mechanism encoder decoder embedding '
+                       'training optimization loss function epoch batch normalization',
+    'ML-Research':     'machine learning research paper arXiv benchmark dataset supervised unsupervised reinforcement '
+                       'classification regression clustering evaluation metric accuracy F1 precision recall '
+                       'theoretical analysis proof convergence statistical learning generalization',
+    'AI-Applications': 'artificial intelligence product launch tool application platform software deployment API SDK '
+                       'enterprise customer user company startup agent automation copilot assistant code generation '
+                       'image generation video generation creative content production workflow productivity',
+    'Finance':         'stock market finance investment trading cryptocurrency bitcoin ethereum price earnings revenue '
+                       'profit quarterly report IPO merger acquisition dividend yield inflation interest rate Fed '
+                       'central bank economy GDP recession bull bear rally sector index S&P 500 Nasdaq Dow Jones '
+                       'Wall Street hedge fund portfolio asset management',
+    'Cybersecurity':   'security cybersecurity vulnerability exploit breach malware ransomware phishing attack threat '
+                       'CVE zero-day patch firewall encryption authentication data leak incident response forensics '
+                       'penetration testing APT nation-state espionage',
 }
 
 
@@ -429,7 +442,7 @@ def _classify_embedding(article):
     best_cat = max(scores, key=scores.get)
     best_score = scores[best_cat]
 
-    if best_score < 0.25:
+    if best_score < 0.15:
         return 'Uncategorized', 0.0, [], 'news'
 
     return best_cat, round(best_score, 4), [best_cat], 'news'
