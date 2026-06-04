@@ -48,9 +48,9 @@ dependencies = [
 ]
 
 [project.urls]
-"Source" = "https://github.com/anomalyco/bloomy-news"
-"Bug Tracker" = "https://github.com/anomalyco/bloomy-news/issues"
-"Changelog" = "https://github.com/anomalyco/bloomy-news/blob/main/CHANGELOG.md"
+"Source" = "https://github.com/aaru-sh/bloomy-news"
+"Bug Tracker" = "https://github.com/aaru-sh/bloomy-news/issues"
+"Changelog" = "https://github.com/aaru-sh/bloomy-news/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 # We don't actually ship a Python package — the project is a flat

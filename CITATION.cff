@@ -6,8 +6,8 @@ title: "Bloomy News"
 version: 1.0.0
 date-released: 2026-06-04
 license: MIT
-url: "https://github.com/OWNER/bloomy-news"
-repository-code: "https://github.com/OWNER/bloomy-news"
+url: "https://github.com/aaru-sh/bloomy-news"
+repository-code: "https://github.com/aaru-sh/bloomy-news"
 type: software
 keywords:
   - news-aggregator
