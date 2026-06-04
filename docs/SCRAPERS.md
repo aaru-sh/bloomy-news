@@ -30,9 +30,9 @@ The canonical article shape is:
 
 ## Existing scrapers
 
-### `scrape_arxiv()` — 13 RSS feeds
+### `scrape_arxiv()` — 4 RSS feeds
 
-Fetches the RSS feed for each arXiv subject category listed in `config/sources.json` under `arxiv_rss`. Parses with `feedparser`, normalizes the version suffix out of the ID, and sets `arxiv_category` from the URL path. The first 5 entries per feed are kept (arXiv feeds can be huge).
+Fetches 4 hardcoded arXiv subject categories (cs.AI, cs.LG, cs.CL, cs.CV). The `config/sources.json` file has 13 entries under `arxiv_rss`; only these 4 are currently fetched. To enable the others, edit the `feeds` list in `scrape_arxiv()` in `news_tool.py`. Parses with `feedparser`, normalizes the version suffix out of the ID, and sets `arxiv_category` from the URL path. The first 5 entries per feed are kept (arXiv feeds can be huge).
 
 This is the only scraper that sets `arxiv_category`, which the classifier uses as a strong prior.
 
@@ -58,9 +58,11 @@ Hits the Finnhub `/news?category=general` endpoint. 15 articles. Requires `FINNH
 
 This is a generic scraper that pulls from a list of tech RSS feeds defined inline in `news_tool.py` (e.g., TechCrunch, Ars Technica, The Verge). Not configurable via `config/sources.json` — if you want to add a tech feed, edit the source list in the function.
 
-### `scrape_google_news()` — 14 query feeds
+### `scrape_google_news()` — 3 query feeds
 
-Fetches 14 Google News RSS search feeds defined in `config/sources.json` under `google_news_rss`. Each feed is a search query (e.g., "large language model OR LLM OR GPT", "cybersecurity OR data breach", "stock market OR trading"). The first 5 results per feed are kept.
+Fetches 3 hardcoded Google News RSS search queries (AI/ML, cybersecurity, stock market). The `config/sources.json` file has 14 entries under `google_news_rss`; only these 3 are currently fetched. To enable the others, edit the `queries` list in `scrape_google_news()` in `news_tool.py`. Each feed is a search query (e.g., "artificial+intelligence+machine+learning", "cybersecurity+news", "stock+market+trading"). The first 5 results per feed are kept.
+
+Google News RSS feeds frequently emit redirect URLs (e.g., `https://news.google.com/articles/CAIiE...`). These are resolved to the actual article URL by `resolve_google_news_redirect()` (HEAD with redirect following, then a GET fallback that looks for `<link rel="canonical">` or `<meta property="og:url">`). Articles whose redirect can't be resolved still go into the DB with the original Google URL — clicking through sends the user to a Google tracker instead of the real article, but the article itself is captured.
 
 ### `scrape_markets()` — additional finance feeds
 

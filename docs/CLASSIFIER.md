@@ -2,6 +2,15 @@
 
 This document explains how `classify_article()` decides which of the 6 categories an article belongs to, how the keyword table is structured, and how to tune it.
 
+## Two modes
+
+`classify_article()` picks one of two implementations at import time:
+
+- **Keyword mode** (default, no extra deps) — the rest of this document.
+- **Embedding mode** (when `sentence-transformers` is installed) — `all-MiniLM-L6-v2` encodes the article and compares by cosine similarity against per-category semantic centroids. Higher accuracy on ambiguous titles; requires PyTorch (~1 GB on disk) and downloads the 80 MB model on first use. Falls back to keyword mode automatically if the model can't be loaded.
+
+If you want the embedding mode, install with the default `pip install -r requirements.txt`. If you want a zero-neural-net install, run `pip install requests` instead and only the keyword classifier is available. The `EMBEDDING_AVAILABLE` flag in `news_tool.py` reports which mode is active.
+
 ## The 6 categories
 
 | Category          | What it covers                                           |

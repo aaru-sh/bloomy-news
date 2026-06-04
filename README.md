@@ -9,7 +9,7 @@ If you are new to the AI field, the rest of this README is written so that you c
 [![Version](https://img.shields.io/github/v/release/aaru-sh/bloomy-news?include_prereleases)](https://github.com/aaru-sh/bloomy-news/releases)
 [![Python](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey.svg)]()
-[![Tests passing](https://img.shields.io/badge/tests-30%20unit%20%2B%2010%20smoke-brightgreen.svg)](tests/)
+[![Tests passing](https://img.shields.io/badge/tests-36%20unit%20%2B%208%20smoke-brightgreen.svg)](tests/)
 
 ## Who this is for
 
@@ -23,7 +23,7 @@ A **news aggregator** is a program that reads articles from many different websi
 
 Bloomy News runs **eight scrapers** (one per source type) and writes the result into a single **SQLite database** file. After the articles are in the database, three things happen:
 
-1. A **classifier** looks at each article's title and summary and decides which of six **categories** it belongs to (LLM, Neural Nets, ML Research, AI Applications, Finance, Cybersecurity). The classifier is a hand-written keyword matcher — no LLM, no neural network, no GPU, no API cost. It is fast, deterministic, and runs offline.
+1. A **classifier** looks at each article's title and summary and decides which of six **categories** it belongs to (LLM, Neural Nets, ML Research, AI Applications, Finance, Cybersecurity). The default classifier is a hand-written keyword matcher — no neural network, no GPU, no API cost. It is fast, deterministic, and runs offline. If `sentence-transformers` is installed (see [Classification](#classification) below), an embedding-based classifier kicks in automatically — higher accuracy on ambiguous titles, at the cost of a one-time ~80 MB model download and ~1 GB of disk for PyTorch.
 2. A **deduplicator** removes articles that are essentially the same. The same press release often appears on five different sites, and arXiv papers get re-posted as the authors update them; both cases are caught.
 3. Two **publishers** make the data visible: a local HTTP **dashboard** at `http://127.0.0.1:8080` (only reachable from your own machine), and a **Telegram digest** that posts the top three articles per category to a channel of your choice.
 
@@ -106,7 +106,7 @@ bloomy-news/
 │   ├── telegram_bot.py   # daily digest poster
 │   ├── smoke_test.py     # 10-check fresh-install verifier
 │   └── check_system.py   # health check
-├── tests/                # 30 unit tests
+├── tests/                # 36 unit tests (18 fixes + 12 fresh-install + 6 classifier accuracy)
 ├── config/               # source URLs, category keywords, telegram channels
 ├── docs/                 # deep technical docs
 ├── .env.example          # template for the 3 optional API keys
@@ -117,8 +117,8 @@ bloomy-news/
 <details>
 <summary><strong>Full feature list</strong></summary>
 
-- **8 scrapers** — arXiv (13 RSS feeds), GitHub trending, NewsAPI, dedicated cybersecurity feeds (SecurityWeek, Krebs, Hacker News, BleepingComputer, AWS/GCP/Azure security blogs), Finnhub finance news, Google News (14 query feeds), and Markets.
-- **6-category classifier** — LLM, Neural Nets, ML Research, AI Applications, Finance, Cybersecurity — with arXiv subject as a strong prior, multi-tag output, and a graceful `Uncategorized` fallback when no keyword matches.
+- **8 scrapers** — arXiv (4 RSS feeds: cs.AI, cs.LG, cs.CL, cs.CV), GitHub trending, NewsAPI, dedicated cybersecurity feeds (SecurityWeek, Krebs, Hacker News, BleepingComputer, AWS/GCP/Azure security blogs), Finnhub finance news, Google News (3 query feeds; redirect URLs are resolved to the real publisher), and Markets.
+- **6-category classifier** — LLM, Neural Nets, ML Research, AI Applications, Finance, Cybersecurity — with arXiv subject as a strong prior, multi-tag output, and an `Uncategorized` fallback when no category crosses the confidence threshold. Two modes: a default keyword matcher (fast, offline, ~0 deps) and an optional embedding classifier using `all-MiniLM-L6-v2` (higher accuracy, requires `sentence-transformers` — see [Classification](#classification) below for the install trade-off).
 - **Two-layer deduplication** — Jaccard title similarity (≥0.80) for general articles + arXiv version tracking (v1/v2/v3 of the same paper collapse to one entry).
 - **SQLite primary store** with WAL mode, FTS5 full-text index, and atomic writes. Filesystem archive of compressed `.md.gz` files per category for historical articles.
 - **3-page dashboard** at `http://127.0.0.1:8080` — landing (hero + category grid + recent), filters (calendar + search + multi-select dropdowns), bookmarks (starred articles, GitHub-starred style).
@@ -307,7 +307,7 @@ python news_tool.py
 Output looks like:
 
 ```
-[1/8] arXiv (13 feeds)...
+[1/8] arXiv (4 feeds)...
   -> 47 new articles
 [2/8] GitHub...
   -> 3 new articles
@@ -409,12 +409,24 @@ All endpoints return JSON. All error responses use 4xx with a JSON body.
 
 `classify_article(title, summary, source=None, arxiv_category=None)` returns `(category, confidence, tags, subcategory)`.
 
-The algorithm is keyword scoring with a strong prior:
+The classifier has two modes. The dispatcher picks automatically based on what's installed:
 
-1. **arXiv prior.** If the source is arXiv, the arXiv subject category (`cs.CL` for computation and language, `cs.LG` for machine learning, `q-fin.ST` for financial statistics, etc.) is mapped to one of the 6 categories with high confidence (≥0.9) and used as the primary signal. This is reliable because arXiv authors self-categorize.
-2. **Keyword scoring.** Otherwise, every word in the title and summary is scored against `CATEGORY_KEYWORDS` in `news_tool.py`. Each match is weighted by where it appears (title vs. body) and how specific the keyword is.
-3. **Top-category wins.** The top-scoring category wins. If no keyword matches above the threshold, the article is labeled `Uncategorized` (confidence 0.0) instead of being forced into a category.
-4. **Multi-tag output.** All keywords that matched (across all categories) are returned as a tag list, capped at 5.
+1. **Keyword mode (default).** No external deps beyond `requests`. Every word in the title and summary is scored against `CATEGORY_KEYWORDS` in `news_tool.py`. The arXiv subject category is a strong prior when present (`cs.CL` → LLM, `cs.LG` → ML-Research, `q-fin.ST` → Finance, etc.). Fast, deterministic, offline. If no keyword crosses the threshold, the article is labeled `Uncategorized` (confidence 0.0) instead of being forced into a category.
+2. **Embedding mode (opt-in).** If `sentence-transformers` is installed, the title+summary is encoded with `all-MiniLM-L6-v2` (one-time ~80 MB download) and compared by cosine similarity against per-category semantic centroids. Higher accuracy on ambiguous titles (e.g. distinguishing "Gemini" the model from "Gemini" the space mission by context), but requires PyTorch (~1 GB on disk, ~500 MB RAM at load). Falls back to keyword mode automatically if the model download fails.
+
+**Trade-off in one line:** install `sentence-transformers` for the better classifier (1 GB disk cost, ~80 MB model download on first use); skip it for a zero-neural-net install that still works fine on most news.
+
+To enable embedding mode on a fresh install:
+
+```bash
+pip install -r requirements.txt   # installs both requests and sentence-transformers
+```
+
+To install without it (keyword-only):
+
+```bash
+pip install requests               # bare minimum, no neural nets
+```
 
 For the full keyword table and weighting details, see [docs/CLASSIFIER.md](docs/CLASSIFIER.md).
 
@@ -483,11 +495,11 @@ bloomy-news/
 ├── RELEASE_NOTES.md           pre-formatted notes for the GitHub Release UI
 ├── SECURITY.md                threat model + reporting policy
 ├── pyproject.toml             PEP 621 metadata; `pip install -e .` works
-├── requirements.txt           `requests>=2.28.0` (the only external dep)
+├── requirements.txt           `requests>=2.28.0` (required) + `sentence-transformers>=2.2.0` (optional, enables embedding classifier)
 │
 ├── config/                    tracked JSON, ${VAR} placeholders only
 │   ├── categories.json        classification keyword rules
-│   ├── sources.json           API endpoints + 13 arXiv feeds + 14 Google News feeds
+│   ├── sources.json           API endpoints + 4 arXiv feeds + 3 Google News queries
 │   └── telegram.json          bot placeholder + 7 channel IDs
 │
 ├── dashboard/                 3-page local UI + HTTP server
