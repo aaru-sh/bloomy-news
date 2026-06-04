@@ -15,7 +15,7 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 
 ## [1.0.0] - 2026-06-04
 
-Initial public release. The system has been in private use for several months; this release marks the first version packaged for distribution.
+**Released.** Initial public release. The system has been in private use for several months; this release marks the first version packaged for distribution.
 
 ### Highlights
 

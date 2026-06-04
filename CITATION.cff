@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: |
+  If you use this software in a project, paper, or article, please cite it
+  using the metadata below.
+title: "Bloomy News"
+version: 1.0.0
+date-released: 2026-06-04
+license: MIT
+url: "https://github.com/OWNER/bloomy-news"
+repository-code: "https://github.com/OWNER/bloomy-news"
+type: software
+keywords:
+  - news-aggregator
+  - rss
+  - arxiv
+  - telegram-bot
+  - dashboard
+  - sqlite
+  - cybersecurity
+  - finance
+  - machine-learning
+  - self-hosted
+abstract: |
+  Bloomy News is a self-hosted news aggregation pipeline. It scrapes 8
+  public sources (arXiv, GitHub, NewsAPI, two cybersecurity feeds, Finnhub,
+  Google News, and two market-data feeds), classifies each article into
+  one of six categories using a keyword scorer with an arXiv subject prior,
+  deduplicates via Jaccard title similarity and arXiv version tracking,
+  stores the result in SQLite, surfaces it in a local-only three-page
+  dashboard, and posts a daily digest to a Telegram channel and six
+  per-category sub-channels. A 12-hour scheduler keeps it running
+  unattended; a catch-up mechanism handles laptop-sleep gaps.
+  The whole project is single-user, localhost-only, and uses the Python
+  standard library plus one external dependency (`requests`).

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask a question / Start a discussion
+    url: https://github.com/OWNER/bloomy-news/discussions
+    about: Use GitHub Discussions for questions, ideas, and show-and-tell.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/OWNER/bloomy-news/security/advisories/new
+    about: Please do NOT file a public issue for security bugs.
+  - name: 📖 Read the documentation
+    url: https://github.com/OWNER/bloomy-news#table-of-contents
+    about: README, docs/, and the wiki cover most setup and usage questions.

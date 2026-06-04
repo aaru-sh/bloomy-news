@@ -2,11 +2,13 @@
 
 A self-hosted news aggregation pipeline that scrapes 8 sources, classifies articles into 6 categories, deduplicates intelligently, and surfaces the result in a local dashboard and a Telegram digest — running unattended on a 12-hour cadence.
 
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![Tests](https://github.com/OWNER/bloomy-news/actions/workflows/test.yml/badge.svg)](https://github.com/OWNER/bloomy-news/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-active-success.svg)]()
-[![Tests](https://img.shields.io/badge/tests-18%20passing-brightgreen.svg)](tests/)
-[![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux-lightgrey.svg)]()
+[![Version](https://img.shields.io/github/v/release/OWNER/bloomy-news?include_prereleases)](https://github.com/OWNER/bloomy-news/releases)
+[![Python](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
+[![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey.svg)]()
+[![Tests passing](https://img.shields.io/badge/tests-30%20unit%20%2B%2010%20smoke-brightgreen.svg)](tests/)
+[![Last commit](https://img.shields.io/github/last-commit/OWNER/bloomy-news)](https://github.com/OWNER/bloomy-news/commits/main)
 
 ---
 
