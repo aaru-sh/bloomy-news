@@ -225,10 +225,12 @@ def get_articles(category=None, source=None, date_from=None, date_to=None, searc
             conditions.append("source = ?")
             params.append(source)
         if date_from:
-            conditions.append("published >= ?")
+            # Use SQLite's date() so date-only inputs (e.g. "2025-12-15")
+            # match full ISO timestamps in the column ("2025-12-15T10:30:00").
+            conditions.append("date(published) >= date(?)")
             params.append(date_from)
         if date_to:
-            conditions.append("published <= ?")
+            conditions.append("date(published) <= date(?)")
             params.append(date_to)
         if is_read is not None:
             conditions.append("is_read = ?")
@@ -257,6 +259,42 @@ def mark_read(id):
     try:
         conn.execute("UPDATE articles SET is_read = 1 WHERE id = ?", (id,))
         conn.commit()
+    finally:
+        conn.close()
+
+
+def mark_read_batch(ids):
+    """Mark multiple articles as read in a single transaction.
+
+    No-op for an empty list. Skips silently if any id is missing - safer
+    than raising in batch contexts like the Telegram poster.
+    """
+    if not ids:
+        return 0
+    placeholders = ",".join("?" * len(ids))
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            f"UPDATE articles SET is_read = 1 WHERE id IN ({placeholders})",
+            ids,
+        )
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+def count_articles_today_by_category():
+    """Return {category: count} for articles published today (UTC)."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT category, COUNT(*) AS cnt
+            FROM articles
+            WHERE date(published) = date('now')
+            GROUP BY category
+        """).fetchall()
+        return {r["category"]: r["cnt"] for r in rows}
     finally:
         conn.close()
 

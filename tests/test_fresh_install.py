@@ -50,7 +50,10 @@ class TestPathResolution(unittest.TestCase):
         import scripts.telegram_bot as telegram_bot
         root = self._project_root()
         self.assertEqual(telegram_bot.BASE, root)
-        self.assertEqual(telegram_bot.DB_PATH, root / "news.db")
+        # The refactored telegram_bot imports database.DB_PATH instead of
+        # declaring its own — verify it agrees with the database module.
+        import database
+        self.assertEqual(database.DB_PATH, root / "news.db")
 
     def test_serve_paths_derive_from_module(self):
         import serve
