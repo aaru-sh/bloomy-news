@@ -376,25 +376,84 @@ def scrape_markets():
     print(f"    Found {len(articles)} articles")
     return articles
 
-def classify_article(article):
+try:
+    from sentence_transformers import SentenceTransformer
+    import numpy as np
+    EMBEDDING_AVAILABLE = True
+except ImportError:
+    EMBEDDING_AVAILABLE = False
+
+_embedding_model = None
+_category_embeddings = None
+
+CATEGORY_DESCRIPTIONS = {
+    'LLM':             'large language models GPT Claude Llama Mistral transformer chatbot prompt fine-tuning RLHF',
+    'Neural-Nets':     'neural network deep learning architecture backpropagation convolutional recurrent attention mechanism',
+    'ML-Research':     'machine learning research paper algorithm optimization gradient statistical learning theory benchmark',
+    'AI-Applications': 'artificial intelligence product application tool agent automation software deployment chatbot assistant',
+    'Finance':         'stock market finance investment trading cryptocurrency bitcoin earnings revenue economic policy IPO',
+    'Cybersecurity':   'security vulnerability exploit breach malware ransomware CVE patch threat zero-day encryption',
+}
+
+
+def _get_embedding_model():
+    global _embedding_model, _category_embeddings
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        _category_embeddings = {
+            cat: _embedding_model.encode(desc, convert_to_numpy=True)
+            for cat, desc in CATEGORY_DESCRIPTIONS.items()
+        }
+    return _embedding_model, _category_embeddings
+
+
+def _classify_embedding(article):
+    title = article.get('title', '')
+    summary = article.get('summary', '')
+    text = f"{title}. {summary}"
+
+    model, cat_embs = _get_embedding_model()
+    text_emb = model.encode(text, convert_to_numpy=True)
+    text_norm = np.linalg.norm(text_emb)
+    if text_norm == 0:
+        return 'Uncategorized', 0.0, [], 'news'
+
+    scores = {}
+    for cat, cat_emb in cat_embs.items():
+        cat_norm = np.linalg.norm(cat_emb)
+        if cat_norm == 0:
+            scores[cat] = 0.0
+        else:
+            scores[cat] = float(np.dot(text_emb, cat_emb) / (text_norm * cat_norm))
+
+    best_cat = max(scores, key=scores.get)
+    best_score = scores[best_cat]
+
+    if best_score < 0.25:
+        return 'Uncategorized', 0.0, [], 'news'
+
+    return best_cat, round(best_score, 4), [best_cat], 'news'
+
+
+def _classify_keywords(article):
     text = f"{article.get('title', '')} {article.get('summary', '')}".lower()
-    
+
     scores = {}
     for cat, keywords in CATEGORY_KEYWORDS.items():
         score = sum(1 for kw in keywords if kw in text)
         scores[cat] = score
-    
+
     max_score = max(scores.values(), default=0)
-    
+
     if max_score == 0:
         return "Uncategorized", 0.0, [], "news"
-    
+
     primary = max(scores, key=scores.get)
     confidence = min(max_score / 5.0, 1.0)
-    
+
     threshold = max_score * 0.5
     tags = [cat for cat, score in scores.items() if cat != primary and score >= threshold]
-    
+
     # Determine subcategory
     subcategory = "news"
     if primary in SUBCATEGORY_KEYWORDS:
@@ -408,8 +467,14 @@ def classify_article(article):
                 best_subcat = subcat_name
         if best_score > 0:
             subcategory = best_subcat
-    
+
     return primary, confidence, tags, subcategory
+
+
+def classify_article(article):
+    if EMBEDDING_AVAILABLE:
+        return _classify_embedding(article)
+    return _classify_keywords(article)
 
 def post_to_telegram(categorized):
     tg_path = BASE / "config" / "telegram.json"
