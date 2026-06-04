@@ -3,15 +3,29 @@
 import json
 import html
 import re
+import sys
 import time
 import sqlite3
 import requests
 from pathlib import Path
 from datetime import date
 
-BASE = Path(r"E:\AI\Projects\News")
+BASE = Path(__file__).parent.parent.resolve()
 DB_PATH = BASE / "news.db"
 CONFIG_PATH = BASE / "config" / "telegram.json"
+LOG_DIR = BASE / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+LOG_FILE = LOG_DIR / "telegram_bot.log"
+
+
+def _log(msg):
+    """Print to stdout and append to log file (no external deps)."""
+    print(msg)
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{date.today().isoformat()}T{time.strftime('%H:%M:%S')} {msg}\n")
+    except OSError:
+        pass
 
 MAX_MSG_LENGTH = 4096
 RETRY_DELAY = 2

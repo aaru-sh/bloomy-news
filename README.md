@@ -57,16 +57,22 @@ The whole stack is one Python project, one local SQLite file, and one HTTP serve
 
 ## Quick start
 
-**Windows (one command):**
+**One command (cross-platform):**
 
-```bat
-:: from the project root
+```bash
+# Windows
 LAUNCH_DAILY.bat
+
+# Linux / macOS
+./launch_daily.sh
+
+# or, if you have `make` installed (Git Bash, WSL, Linux, macOS)
+make run
 ```
 
 This runs a health check, starts the dashboard server on `http://127.0.0.1:8080`, executes the full news pipeline, and regenerates the dashboard data file.
 
-**Linux / macOS (or step-by-step on Windows):**
+**Or step-by-step on any platform:**
 
 ```bash
 # 1. install dependencies
@@ -143,9 +149,9 @@ If you want the Telegram digest, edit `config/telegram.json` and set the channel
 ```bash
 # one-shot: pipeline + dashboard
 LAUNCH_DAILY.bat         # Windows
-./launch_daily.sh        # create this for Linux/macOS — equivalent commands
+./launch_daily.sh        # Linux / macOS
 
-# or manually:
+# or manually (any platform):
 python news_tool.py && python dashboard/generate_data.py
 python dashboard/serve.py
 ```
@@ -352,10 +358,12 @@ The `news.db` file is the source of truth at runtime. The `.md.gz` archives are 
 ```
 Bloomy-news/
 ├── LAUNCH_DAILY.bat            one-shot health+server+pipeline+regen (Windows)
+├── launch_daily.sh             same as above, for Linux / macOS
+├── Makefile                    `make run|test|install|clean` shortcuts (cross-platform)
 ├── news_tool.py                pipeline: 8 scrapers, classifier, dedup, telegram poster
 ├── database.py                 SQLite layer: articles, dedup_log, FTS5, Jaccard
 ├── secrets.py                  env + config loader with ${VAR} expansion
-├── requirements.txt            requests, feedparser, python-dateutil
+├── requirements.txt            requests (for Telegram bot + system check)
 ├── .env.example                template for the 3 optional API keys
 ├── .gitignore
 ├── LICENSE                     MIT
@@ -415,10 +423,12 @@ Bloomy-news/
 ### Running tests
 
 ```bash
-python -m unittest tests.test_fixes -v
+python -m unittest discover -s tests -v
+# or, with make:
+make test
 ```
 
-18 tests cover:
+30 tests cover:
 
 - `title_similarity` — Jaccard edge cases (identical, partial, normalized, empty)
 - Classifier fallback — "Uncategorized" path, no false AI-Applications assignment
@@ -426,6 +436,24 @@ python -m unittest tests.test_fixes -v
 - Secrets loader — env-overrides-config precedence, `${VAR}` expansion
 - Bookmark API input limits — body cap, bookmark cap
 - Scheduler state machine — catch-up at no-state / old-state / recent-state, next-checkpoint calc
+- **Fresh-install** — all 5 module paths derive from `__file__` (no hardcoded `E:\`); `init_db()` creates the schema at the project root; `serve.py` returns valid empty JSON when `dashboard_data.json` is missing; the bookmark API accepts/validates IDs end-to-end over a real HTTP server.
+
+### Common tasks (Makefile)
+
+```bash
+make install              # pip install -r requirements.txt
+make test                 # run the test suite
+make pipeline             # run the news pipeline once
+make server               # start the dashboard server (foreground)
+make run                  # one-shot: health + server + pipeline + regen
+make scheduler-install    # install scheduler as Windows autostart
+make scheduler-uninstall  # remove scheduler autostart
+make scheduler-status     # print scheduler state
+make scheduler-run        # run the scheduler pipeline once and exit
+make clean                # delete news.db, dashboard data, .last_run
+```
+
+All targets are pure cross-platform. Override the interpreter with `make PYTHON=python3 ...` if `python3` isn't on your PATH.
 
 ### Adding a new scraper
 
