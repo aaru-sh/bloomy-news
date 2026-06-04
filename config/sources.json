@@ -1,0 +1,68 @@
+{
+  "_comment": "API keys and bot token live in .env (see .env.example). Keys below are env placeholders; the secrets.py loader expands them at runtime. Channel IDs and source URLs are public config.",
+  "newsapi_key": "${NEWS_API_KEY}",
+  "finnhub_key": "${FINNHUB_API_KEY}",
+  "arxiv_rss": {
+    "cs.CL": "https://rss.arxiv.org/rss/cs.CL",
+    "cs.AI": "https://rss.arxiv.org/rss/cs.AI",
+    "cs.LG": "https://rss.arxiv.org/rss/cs.LG",
+    "cs.NE": "https://rss.arxiv.org/rss/cs.NE",
+    "cs.CR": "https://rss.arxiv.org/rss/cs.CR",
+    "cs.CV": "https://rss.arxiv.org/rss/cs.CV",
+    "cs.RO": "https://rss.arxiv.org/rss/cs.RO",
+    "stat.ML": "https://rss.arxiv.org/rss/stat.ML",
+    "q-fin.CP": "https://rss.arxiv.org/rss/q-fin.CP",
+    "q-fin.TR": "https://rss.arxiv.org/rss/q-fin.TR",
+    "q-fin.PM": "https://rss.arxiv.org/rss/q-fin.PM",
+    "q-fin.RM": "https://rss.arxiv.org/rss/q-fin.RM",
+    "q-fin.ST": "https://rss.arxiv.org/rss/q-fin.ST"
+  },
+  "google_news_rss": {
+    "llm": "https://news.google.com/rss/search?q=large+language+model+OR+LLM+OR+GPT+OR+Claude+OR+Gemini+OR+Llama&hl=en-US&gl=US&ceid=US:en",
+    "ai_agents": "https://news.google.com/rss/search?q=AI+agent+OR+autonomous+agent+OR+agentic+AI&hl=en-US&gl=US&ceid=US:en",
+    "ml_dl": "https://news.google.com/rss/search?q=machine+learning+OR+deep+learning+OR+neural+network&hl=en-US&gl=US&ceid=US:en",
+    "cybersecurity": "https://news.google.com/rss/search?q=cybersecurity+OR+data+breach+OR+hack+OR+vulnerability&hl=en-US&gl=US&ceid=US:en",
+    "cloud_security": "https://news.google.com/rss/search?q=cloud+security+OR+AWS+security+OR+Azure+security+OR+zero+trust&hl=en-US&gl=US&ceid=US:en",
+    "web_security": "https://news.google.com/rss/search?q=web+application+security+OR+API+security+OR+OWASP&hl=en-US&gl=US&ceid=US:en",
+    "stock_market": "https://news.google.com/rss/search?q=stock+market+OR+trading+OR+S%26P+500+OR+Nasdaq&hl=en-US&gl=US&ceid=US:en",
+    "trump_market": "https://news.google.com/rss/search?q=Trump+tariff+OR+trade+war+OR+economic+policy+stock&hl=en-US&gl=US&ceid=US:en",
+    "elon_market": "https://news.google.com/rss/search?q=Elon+Musk+Tesla+OR+SpaceX+stock+market&hl=en-US&gl=US&ceid=US:en",
+    "fed_rates": "https://news.google.com/rss/search?q=Federal+Reserve+OR+interest+rate+OR+inflation+market&hl=en-US&gl=US&ceid=US:en",
+    "quant_trading": "https://news.google.com/rss/search?q=quantitative+trading+OR+algorithmic+trading+OR+hedge+fund&hl=en-US&gl=US&ceid=US:en",
+    "cve_exploit": "https://news.google.com/rss/search?q=CVE+OR+vulnerability+OR+exploit+OR+zero+day&hl=en-US&gl=US&ceid=US:en",
+    "ransomware_apt": "https://news.google.com/rss/search?q=ransomware+OR+malware+OR+APT+OR+threat+actor&hl=en-US&gl=US&ceid=US:en",
+    "container_security": "https://news.google.com/rss/search?q=container+security+OR+Kubernetes+security+OR+DevSecOps&hl=en-US&gl=US&ceid=US:en"
+  },
+  "security_rss": {
+    "securityweek": "https://feeds.feedburner.com/securityweek",
+    "hackernews": "https://thehackernews.com/feeds/posts/default",
+    "krebs": "https://krebsonsecurity.com/feed/",
+    "bleepingcomputer": "https://www.bleepingcomputer.com/feed/",
+    "aws_security": "https://aws.amazon.com/blogs/security/feed/",
+    "google_cloud_security": "https://cloud.google.com/blog/products/identity-security/rss",
+    "azure_security": "https://techcommunity.microsoft.com/plugins/custom/microsoft/o365/custom-blog-rss?board=MicrosoftDefenderCloudBlog"
+  },
+  "github": {
+    "awesome_agent_papers": {
+      "repo": "VoltAgent/awesome-ai-agent-papers",
+      "api": "https://api.github.com/repos/VoltAgent/awesome-ai-agent-papers",
+      "raw_readme": "https://raw.githubusercontent.com/VoltAgent/awesome-ai-agent-papers/main/README.md"
+    }
+  },
+  "finnhub": {
+    "base_url": "https://finnhub.io/api/v1",
+    "endpoints": {
+      "market_news": "/news?category=general",
+      "company_news": "/company-news?symbol={symbol}&from={from}&to={to}",
+      "insider_sentiment": "/stock/insider-sentiment?symbol={symbol}",
+      "lobbying": "/stock/lobbying?symbol={symbol}"
+    }
+  },
+  "newsapi": {
+    "base_url": "https://newsapi.org/v2",
+    "endpoints": {
+      "top_headlines": "/top-headlines",
+      "everything": "/everything"
+    }
+  }
+}

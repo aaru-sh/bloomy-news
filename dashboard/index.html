@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloomsberg News</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <header class="header">
+        <div class="header-left">
+            <h1 class="logo">BLOOMSBERG</h1>
+            <span class="logo-accent">NEWS</span>
+        </div>
+        <div class="header-right">
+            <a href="filters.html" class="nav-link">Filters</a>
+            <a href="bookmarks.html" class="nav-link">Bookmarks</a>
+            <button id="theme-toggle" class="theme-toggle" title="Toggle theme" aria-label="Toggle dark mode">
+                <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="hero-content">
+            <h2 class="hero-title">
+                BLOOMSBERG
+                <span class="hero-title-accent">NEWS</span>
+            </h2>
+            <p class="hero-subtitle">AI · Finance · Cybersecurity</p>
+            <p class="hero-tagline">Daily intelligence, curated.</p>
+            <a href="filters.html" class="hero-cta">
+                Browse Articles
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </a>
+        </div>
+    </section>
+
+    <main id="main-content" class="container">
+        <section class="section">
+            <div class="section-header">
+                <div class="section-label">Today's Briefing</div>
+                <h3 class="section-title">Across all categories</h3>
+            </div>
+            <div id="category-grid" class="category-grid"></div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="section-label">Latest Articles</div>
+                <h3 class="section-title">Recent from all sources</h3>
+            </div>
+            <div id="loading" class="loading-state" role="status" aria-label="Loading articles">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading latest articles...</p>
+            </div>
+            <div id="error-state" class="error-state" role="alert" aria-label="Error loading articles" style="display:none">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Failed to load articles</p>
+                <button class="btn btn-accent retry-btn">Try Again</button>
+            </div>
+            <div id="article-grid" class="article-grid" aria-live="polite"></div>
+            <div id="empty-state" class="empty-state" style="display:none">
+                <div class="empty-icon">📭</div>
+                <div class="empty-title">No articles found</div>
+                <div class="empty-text">Run news_tool.py first to generate dashboard data.</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <span class="footer-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Last updated: <span id="update-time">--</span>
+            </span>
+            <span class="footer-sep">·</span>
+            <span class="footer-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span id="source-count">0</span> sources
+            </span>
+            <span class="footer-sep">·</span>
+            <span class="footer-item footer-local" title="Local news aggregator">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Local
+            </span>
+        </div>
+    </footer>
+
+    <div id="side-panel" class="side-panel">
+        <div class="panel-header">
+            <div id="panel-category" class="panel-category"></div>
+            <div class="panel-header-actions">
+                <button id="panel-star-btn" class="panel-star-btn" title="Bookmark article" aria-label="Bookmark this article" aria-pressed="false">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </button>
+                <button id="panel-close" class="panel-close" title="Close (Esc)" aria-label="Close article panel">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <h2 id="panel-title" class="panel-title"></h2>
+            <div class="panel-meta">
+                <span id="panel-source" class="panel-source"></span>
+                <span>·</span>
+                <span id="panel-date"></span>
+            </div>
+            <div id="panel-tags" class="panel-tags"></div>
+            <div class="panel-divider"></div>
+            <div id="panel-summary" class="panel-summary"></div>
+            <a id="panel-link" class="panel-link" href="#" target="_blank" rel="noopener" aria-label="Open full article">
+                Read Original Article
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </a>
+        </div>
+    </div>
+    <div id="panel-overlay" class="panel-overlay"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

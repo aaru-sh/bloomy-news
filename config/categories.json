@@ -1,0 +1,52 @@
+{
+  "categories": {
+    "LLM": {
+      "arxiv_categories": ["cs.CL", "cs.AI"],
+      "keywords": ["llm", "gpt", "claude", "gemini", "llama", "transformer", "language model", "prompt", "fine-tuning", "rlhf", "alignment", "safety", "reasoning", "chain-of-thought", "tool-use", "memory", "rag", "agent", "chatbot", "instruct", "token", "context window", "multimodal", "vision language", "code generation", "math reasoning"],
+      "subcategories": ["papers", "news"]
+    },
+    "Neural-Nets": {
+      "arxiv_categories": ["cs.NE"],
+      "keywords": ["neural network", "architecture", "cnn", "rnn", "lstm", "attention", "embedding", "backpropagation", "activation", "neuron", "convolutional", "recurrent", "resnet", "bert", "gan", "autoencoder", "diffusion", "boltzmann", "hopfield", "spiking", "neuromorphic"],
+      "subcategories": ["papers", "news"]
+    },
+    "ML-Research": {
+      "arxiv_categories": ["cs.LG", "stat.ML"],
+      "keywords": ["machine learning", "deep learning", "reinforcement learning", "supervised", "unsupervised", "generalization", "convergence", "optimization", "loss function", "training", "benchmark", "sota", "gradient", "regularization", "ensemble", "bayesian", "federated", "transfer learning", "pretraining", "dataset"],
+      "subcategories": ["papers", "news"]
+    },
+    "AI-Applications": {
+      "arxiv_categories": ["cs.CV", "cs.RO", "cs.HC", "cs.MM"],
+      "keywords": ["application", "deployment", "production", "use case", "industry", "healthcare", "robotics", "vision", "speech", "autonomous", "self-driving", "recommendation", "nlp application", "document", "medical", "legal", "education", "gaming", "simulation"],
+      "subcategories": ["papers", "news"]
+    },
+    "Finance": {
+      "arxiv_categories": ["q-fin.CP", "q-fin.TR", "q-fin.PM", "q-fin.RM", "q-fin.ST"],
+      "keywords": ["stock", "market", "trading", "investment", "portfolio", "hedge fund", "wall street", "sec", "earnings", "ipo", "m&a", "options", "futures", "crypto", "bitcoin", "federal reserve", "interest rate", "inflation", "gdp", "dividend", "share", "equity", "bond", "forex", "commodity"],
+      "subcategories": ["stocks", "trading", "key-figures", "quant"],
+      "key_figures_keywords": ["trump", "elon musk", "federal reserve", "powell", "yellen", "berkshire", "buffett", "citadel", "whale", "congress", "insider"]
+    },
+    "Cybersecurity": {
+      "arxiv_categories": ["cs.CR"],
+      "keywords": ["vulnerability", "exploit", "cve", "hack", "breach", "malware", "ransomware", "apt", "zero-day", "penetration", "firewall", "encryption", "authentication", "oauth", "jwt", "xss", "sqli", "ddos", "phishing", "social engineering", "forensics", "incident response", "siem", "edr", "mdr", "zero trust", "iam", "cloud security", "container security", "api security", "owasp"],
+      "subcategories": ["cloud-security", "web-security", "vulnerabilities", "threat-intel"]
+    }
+  },
+  "priority_figures": [
+    "donald trump",
+    "elon musk",
+    "jerome powell",
+    "janet yellen",
+    "warren buffett",
+    "jensen huang",
+    "sam altman",
+    "satya nadella",
+    "tim cook",
+    "mark zuckerberg",
+    "larry ellison",
+    "cathie wood",
+    "ray dalio",
+    "ken griffin",
+    "steve mnuchin"
+  ]
+}

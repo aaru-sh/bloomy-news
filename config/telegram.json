@@ -1,0 +1,21 @@
+{
+  "_comment": "Channel IDs are public. Bot token comes from .env (TELEGRAM_BOT_TOKEN).",
+  "bot_token": "${TELEGRAM_BOT_TOKEN}",
+  "main_channel_id": "-1003798542488",
+  "category_channels": {
+    "LLM": "-1004295972584",
+    "Neural-Nets": "-1003988552805",
+    "ML-Research": "-1003343992047",
+    "AI-Applications": "-1003808444966",
+    "Finance": "-1003979279316",
+    "Cybersecurity": "-1003573407751"
+  },
+  "category_usernames": {
+    "LLM": "bloomsberg_llm",
+    "Neural-Nets": "bloomsberg_neural",
+    "ML-Research": "bloomsberg_ml",
+    "AI-Applications": "bloomsberg_ai",
+    "Finance": "bloomsberg_finance",
+    "Cybersecurity": "bloomsberg_cyber"
+  }
+}
