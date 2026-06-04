@@ -38,8 +38,8 @@ Open a [feature request](../../issues/new?template=feature_request.md). Please i
 ### Setting up a development environment
 
 ```bash
-git clone https://github.com/<your-username>/Bloomy-news.git
-cd Bloomy-news
+git clone https://github.com/aaru-sh/bloomy-news.git
+cd bloomy-news
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt

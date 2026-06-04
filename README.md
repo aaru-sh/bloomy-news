@@ -59,47 +59,41 @@ The whole stack is one Python project, one local SQLite file, and one HTTP serve
 
 ## Quick start
 
-**One command (cross-platform):**
+### Install (Windows PowerShell)
 
-```bash
-# Windows
-LAUNCH_DAILY.bat
-
-# Linux / macOS
-./launch_daily.sh
-
-# or, if you have `make` installed (Git Bash, WSL, Linux, macOS)
-make run
+```powershell
+git clone https://github.com/aaru-sh/bloomy-news.git; Set-Location bloomy-news; pip install -r requirements.txt; python scripts/smoke_test.py
 ```
 
-This runs a health check, starts the dashboard server on `http://127.0.0.1:8080`, executes the full news pipeline, and regenerates the dashboard data file.
-
-**Or step-by-step on any platform:**
+### Install (bash / zsh / WSL / macOS / Git Bash)
 
 ```bash
-# 1. install dependencies
-pip install -r requirements.txt
-
-# 2. create your secret file (optional - works without API keys too)
-cp .env.example .env
-# edit .env to add TELEGRAM_BOT_TOKEN, NEWS_API_KEY, FINNHUB_API_KEY
-
-# 3. run the pipeline
-python news_tool.py
-python dashboard/generate_data.py
-
-# 4. start the dashboard
-python dashboard/serve.py
-# -> open http://127.0.0.1:8080
+git clone https://github.com/aaru-sh/bloomy-news.git && cd bloomy-news && pip install -r requirements.txt && python scripts/smoke_test.py
 ```
 
-The pipeline works with **zero API keys** — the optional keys (Telegram, NewsAPI, Finnhub) just unlock more scrapers.
+Both one-liners: clone the repo, install the only dependency (`requests`), and run a 10-check smoke test against your local install. If you see `ALL CHECKS PASSED`, you're good.
+
+### Run (Windows PowerShell)
+
+```powershell
+python news_tool.py; python dashboard/generate_data.py; python dashboard/serve.py
+```
+
+### Run (bash / zsh / WSL / macOS / Git Bash)
+
+```bash
+python news_tool.py && python dashboard/generate_data.py && python dashboard/serve.py
+```
+
+Both run the full news pipeline, regenerate the dashboard data, and start the server in the foreground. Open <http://127.0.0.1:8080>. Press `Ctrl+C` to stop the server.
+
+The pipeline works on **zero API keys**. To unlock the Telegram, NewsAPI, and Finnhub scrapers, copy `.env.example` to `.env` and fill in the keys you have — the missing ones are skipped silently.
 
 ---
 
 ## Prerequisites
 
-- **Python 3.11+** (uses `tomllib` and modern type hints)
+- **Python 3.8+** (tested on 3.8, 3.9, 3.10, 3.11, 3.12)
 - **pip** for dependency installation
 - **Windows 10/11** for the registry-based autostart scheduler. On Linux/macOS, the scheduler works as a foreground loop or can be wrapped with `cron` / `systemd` / `launchd`.
 - **A Telegram bot token** (optional, but recommended) — create one via [@BotFather](https://t.me/BotFather).
@@ -114,8 +108,8 @@ The pipeline works with **zero API keys** — the optional keys (Telegram, NewsA
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/Bloomy-news.git
-cd Bloomy-news
+git clone https://github.com/aaru-sh/bloomy-news.git
+cd bloomy-news
 ```
 
 ### 2. Install Python dependencies
@@ -151,16 +145,13 @@ If you want the Telegram digest, edit `config/telegram.json` and set the channel
 ### 5. Run it
 
 ```bash
-# one-shot: pipeline + dashboard
-LAUNCH_DAILY.bat         # Windows
-./launch_daily.sh        # Linux / macOS
-
-# or manually (any platform):
-python news_tool.py && python dashboard/generate_data.py
+# any platform, no wrapper needed
+python news_tool.py
+python dashboard/generate_data.py
 python dashboard/serve.py
 ```
 
-Open `http://127.0.0.1:8080` in your browser.
+Open <http://127.0.0.1:8080> in your browser.
 
 ### Verify your install (optional but recommended)
 
