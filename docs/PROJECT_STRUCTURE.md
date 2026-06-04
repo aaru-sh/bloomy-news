@@ -30,7 +30,7 @@ bloomy-news/
 │
 ├── config/                     tracked JSON, ${VAR} placeholders only
 │   ├── categories.json         classification keyword rules
-│   ├── sources.json            API endpoints + 13 arXiv feeds + 14 Google News feeds
+│   ├── sources.json            API endpoints + 4 arXiv feeds + 3 Google News queries (others defined but not fetched)
 │   └── telegram.json           bot placeholder + 7 channel IDs
 │
 ├── dashboard/                  3-page local UI + HTTP server
