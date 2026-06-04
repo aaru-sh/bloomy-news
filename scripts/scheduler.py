@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-Bloomsberg News - Twice-daily scheduler.
+Bloomy News - Twice-daily scheduler.
 
 Runs the news pipeline + dashboard regeneration at 12:00 AM and 12:00 PM
 local time. On startup, performs a catch-up run if the last scheduled
@@ -39,7 +39,7 @@ REGEN_TIMEOUT = 300
 SLEEP_CHUNK = 30
 
 REG_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-REG_VALUE_NAME = "BloomsbergScheduler"
+REG_VALUE_NAME = "BloomyScheduler"
 
 LOG_DIR.mkdir(exist_ok=True)
 

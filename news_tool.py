@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-Bloomsberg News Excavator - Pure Python News Scraper & Distributor.
+Bloomy News Excavator - Pure Python News Scraper & Distributor.
 """
 import json
 import re
@@ -432,7 +432,7 @@ def post_to_telegram(categorized):
     emojis = {"LLM": "🧠", "Neural-Nets": "🔬", "ML-Research": "📊",
               "AI-Applications": "🤖", "Finance": "💰", "Cybersecurity": "🔒"}
     
-    msg = f"📰 *Bloomsberg Daily Digest*\n"
+    msg = f"📰 *Bloomy Daily Digest*\n"
     msg += f"📅 {date.today()}\n"
     msg += f"{'═' * 30}\n\n"
     
@@ -486,7 +486,7 @@ def post_to_telegram(categorized):
 
 def main():
     logger.info("=" * 60)
-    logger.info("BLOOMSBERG NEWS EXCAVATOR - Starting")
+    logger.info("Bloomy NEWS EXCAVATOR - Starting")
     logger.info("=" * 60)
     
     database.init_db()

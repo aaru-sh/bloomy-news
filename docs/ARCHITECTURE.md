@@ -1,10 +1,10 @@
-# Architecture
+﻿# Architecture
 
-This document is the deep technical reference for how Bloomsberg News works. For a quick overview, see the [README](../README.md#how-it-works).
+This document is the deep technical reference for how Bloomy News works. For a quick overview, see the [README](../README.md#how-it-works).
 
 ## System overview
 
-Bloomsberg News is a single-process, single-host pipeline. There is no message queue, no database server, no separate API tier. The components are:
+Bloomy News is a single-process, single-host pipeline. There is no message queue, no database server, no separate API tier. The components are:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐

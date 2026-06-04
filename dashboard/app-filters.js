@@ -1,4 +1,4 @@
-/* Bloomsberg News — Filters Page App */
+﻿/* Bloomy News — Filters Page App */
 (function () {
     'use strict';
 
@@ -69,7 +69,7 @@
         try { localStorage.setItem(key, value); } catch (e) { /* private mode / quota */ }
     }
     function initTheme() {
-        var saved = safeStorageGet('bloomsberg-theme', 'dark');
+        var saved = safeStorageGet('Bloomy-theme', 'dark');
         document.documentElement.setAttribute('data-theme', saved);
     }
     if (themeToggle) {
@@ -77,7 +77,7 @@
             var current = document.documentElement.getAttribute('data-theme');
             var next = current === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', next);
-            safeStorageSet('bloomsberg-theme', next);
+            safeStorageSet('Bloomy-theme', next);
             themeToggle.setAttribute('aria-pressed', String(next === 'dark'));
         });
     }

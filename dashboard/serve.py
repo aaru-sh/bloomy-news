@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-"""HTTP server with API endpoints for the Bloomsberg News dashboard."""
+﻿#!/usr/bin/env python3
+"""HTTP server with API endpoints for the Bloomy News dashboard."""
 import http.server
 import json
 import os
