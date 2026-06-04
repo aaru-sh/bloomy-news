@@ -171,15 +171,52 @@ def run_loop():
         save_state({"last_run": datetime.now().isoformat(), "last_status": "ok" if ok else "failed"})
 
 
+def get_pythonw_path():
+    """Locate pythonw.exe reliably. Falls back to python.exe with a warning.
+
+    Tries in this order:
+    1. Sibling of sys.executable (e.g. venv/Scripts/pythonw.exe)
+    2. Sibling named pythonw.exe in the same parent dir as sys.executable
+    3. Asks `py -c "import sys; print(sys.executable)"` (Windows Python Launcher)
+    4. Falls back to sys.executable (python.exe) and prints a warning
+    """
+    import sys
+    candidates = []
+    base = Path(sys.executable).parent
+    candidates.append(base / "pythonw.exe")
+    for ancestor in [base, *base.parents]:
+        candidates.append(ancestor / "pythonw.exe")
+    for c in candidates:
+        if c.exists():
+            return c, None
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["py", "-c", "import sys; print(sys.executable)"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                py = Path(result.stdout.strip()).parent / "pythonw.exe"
+                if py.exists():
+                    return py, None
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+    return Path(sys.executable), "pythonw.exe not found, falling back to python.exe (a console window will appear at login)"
+
+
 def install_autostart():
+    """Install the scheduler as a Windows autostart entry.
+    Writes HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\BloomyScheduler.
+    """
     if os.name != "nt":
         print("Auto-install only supported on Windows.")
         return 1
     import winreg
+    pythonw, warn = get_pythonw_path()
+    if warn:
+        print(f"[WARN] {warn}")
     script = BASE / "scripts" / "scheduler.py"
-    pythonw = Path(PYTHON).parent / "pythonw.exe"
-    runner = pythonw if pythonw.exists() else PYTHON
-    cmd = f'"{runner}" "{script}"'
+    cmd = f'"{pythonw}" "{script}"'
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
             winreg.SetValueEx(key, REG_VALUE_NAME, 0, winreg.REG_SZ, cmd)
@@ -188,6 +225,53 @@ def install_autostart():
     except OSError as e:
         print(f"Install failed: {e}")
         return 1
+
+
+def verify_install():
+    """Read the registry value and confirm the pythonw path still exists.
+
+    Returns 0 if installed and the pythonw path resolves, 1 if installed
+    but the pythonw path is broken, 2 if not installed.
+    """
+    if os.name != "nt":
+        print("Verify only supported on Windows.")
+        return 0
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY, 0, winreg.KEY_READ) as key:
+            try:
+                value, _ = winreg.QueryValueEx(key, REG_VALUE_NAME)
+            except FileNotFoundError:
+                print("Not installed.")
+                return 2
+    except OSError as e:
+        print(f"Verify failed: {e}")
+        return 1
+
+    print(f"Registry value: {value}")
+    import shlex
+    try:
+        parts = shlex.split(value)
+        pythonw = Path(parts[0]) if parts else None
+        script = Path(parts[1]) if len(parts) > 1 else None
+    except ValueError:
+        print("[WARN] Could not parse registry value")
+        return 1
+
+    if pythonw and pythonw.exists():
+        print(f"[OK] pythonw path exists: {pythonw}")
+    else:
+        print(f"[FAIL] pythonw path missing: {pythonw}")
+        return 1
+
+    if script and script.exists():
+        print(f"[OK] script path exists: {script}")
+    else:
+        print(f"[FAIL] script path missing: {script}")
+        return 1
+
+    print("[OK] Scheduler install verified.")
+    return 0
 
 
 def uninstall_autostart():
@@ -216,12 +300,15 @@ def main():
     parser.add_argument("--uninstall", action="store_true", help="Remove autostart")
     parser.add_argument("--run-now", action="store_true", help="Run pipeline once and exit")
     parser.add_argument("--status", action="store_true", help="Print state and exit")
+    parser.add_argument("--verify", action="store_true", help="Verify the Windows autostart install")
     args = parser.parse_args()
 
     if args.install:
         return install_autostart()
     if args.uninstall:
         return uninstall_autostart()
+    if args.verify:
+        return verify_install()
     if args.run_now:
         ok = run_pipeline()
         save_state({"last_run": datetime.now().isoformat(), "last_status": "ok" if ok else "failed"})
