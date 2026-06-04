@@ -89,7 +89,7 @@ class TestIdValidation(unittest.TestCase):
 class TestSecretsLoader(unittest.TestCase):
     def test_secrets_from_env_override_config(self):
         with patch.dict(os.environ, {'TELEGRAM_BOT_TOKEN': 'env_token'}):
-            from secrets import get_telegram_token
+            from config import get_telegram_token
             self.assertEqual(get_telegram_token(), 'env_token')
 
 

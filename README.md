@@ -99,7 +99,7 @@ Details for every platform are in [Deployment](#deployment--windows-linux-macos-
 bloomy-news/
 ├── news_tool.py          # pipeline entry point (8 scrapers + classifier + dedup)
 ├── database.py           # SQLite layer (articles, dedup, FTS5, atomic writes)
-├── secrets.py            # env + config loader with ${VAR} expansion
+├── config.py             # env + config loader with ${VAR} expansion (was secrets.py)
 ├── dashboard/            # 3-page local UI + HTTP server (127.0.0.1:8080)
 ├── scripts/
 │   ├── scheduler.py      # 12h background loop with catch-up
@@ -268,7 +268,9 @@ Three JSON files in `config/` carry the per-source and per-channel settings that
 | `config/categories.json` | The category keyword tables used by the classifier         |
 | `config/telegram.json`   | Bot token placeholder + channel IDs (main + 6 sub-channels) |
 
-Any string value in these files can use `${VAR}` placeholder syntax, expanded at load time by `secrets.py`. For example, `config/telegram.json` might have:
+Any string value in these files can use `${VAR}` placeholder
+syntax, expanded at load time by `config.py`. For example,
+`config/telegram.json` might have:
 
 ```json
 {
@@ -503,7 +505,7 @@ bloomy-news/
 │
 ├── database.py                SQLite layer: articles, dedup_log, FTS5, Jaccard
 ├── news_tool.py               pipeline: 8 scrapers, classifier, dedup, telegram poster
-├── secrets.py                 env + config loader with ${VAR} expansion
+├── config.py                   env + config loader with ${VAR} expansion (renamed from secrets.py to avoid stdlib shadow)
 │
 ├── scripts/
 │   ├── check_system.py        health check (Python version, deps, .env, news.db)
@@ -544,7 +546,7 @@ bloomy-news/
 | Add a category            | `news_tool.py` (CATEGORIES + CATEGORY_KEYWORDS) + `config/categories.json` + all 3 `dashboard/app*.js` |
 | Add a dashboard page      | `dashboard/<name>.html` + `dashboard/app-<name>.js` + register in `dashboard/serve.py` |
 | Add a Telegram sub-channel| `.env` (add `TELEGRAM_<NAME>_CHANNEL_ID`) + `config/telegram.json`         |
-| Add an env var            | `.env.example` + `secrets.py` (loader) + `docs/CONFIGURATION.md`          |
+| Add an env var            | `.env.example` + `config.py` (loader) + `docs/CONFIGURATION.md`          |
 | Change the 12h cadence    | `scripts/scheduler.py` (CHECKPOINT_HOURS tuple)                            |
 | Change the dedup threshold| `database.py` (JACCARD_THRESHOLD constant) + `docs/DEDUP.md`              |
 
@@ -662,7 +664,7 @@ The `scripts/scheduler.py --status` command works the same on all platforms.
 - **Dashboard server binds `127.0.0.1`** only — not reachable from your LAN.
 - **Bookmark API validates** the article ID against `^[a-zA-Z0-9_-]{1,64}$`, caps request bodies at 1 KB, and caps the bookmark list at 5,000 entries. All exceeded limits return `400` or `413`.
 - **Atomic writes** for `bookmarks.json`, `dashboard_data.json`, and `.last_run` (temp-file + `os.replace`) plus SQLite WAL mode guarantee no torn writes on crash.
-- **Secrets are env-only.** Real values never appear in any tracked JSON or HTML file. `secrets.py` is the single reader; placeholder values like `${TELEGRAM_BOT_TOKEN}` are expanded at runtime.
+- **Secrets are env-only.** Real values never appear in any tracked JSON or HTML file. `config.py` is the single reader; placeholder values like `${TELEGRAM_BOT_TOKEN}` are expanded at runtime.
 - **CORS is restricted** to `http://localhost:8080`. All responses carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store` for API endpoints.
 - **HTML escaping** in the dashboard: all article text passes through `escapeHtml()` before `innerHTML` assignment. URL fields pass through `safeUrl()` which only allows `http://` and `https://`.
 - **`.env` is gitignored.** A scan of every tracked file confirms no real tokens, API keys, or channel IDs.

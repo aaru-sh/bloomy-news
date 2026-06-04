@@ -68,7 +68,7 @@ please give us a reasonable window to patch before publishing details.
   browser on the same machine. Exposing it to a network is unsupported
   and at your own risk — front it with a reverse proxy + TLS + auth
   if you must.
-- **API-key leakage from a misconfigured `secrets.py` consumer.**
+- **API-key leakage from a misconfigured `config.py` consumer.**
   Keys that start with `YOUR_` are treated as unset, but a typo
   (e.g., `YOUR_KEY_HERE_PLEASE`) will be treated as a real value.
   Verify your config after editing.

@@ -234,7 +234,7 @@ def check_secrets_precedence():
     banner("8. Secrets loader")
     os.environ["TELEGRAM_BOT_TOKEN"] = "smoke_test_token"
     try:
-        from secrets import get_telegram_token
+        from config import get_telegram_token
         token = get_telegram_token()
         if token == "smoke_test_token":
             _ok("env overrides config", "TELEGRAM_BOT_TOKEN=smoke_test_token wins")

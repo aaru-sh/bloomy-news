@@ -53,7 +53,7 @@ Then open <http://127.0.0.1:8080>.
 
 ### Security
 
-- All secrets in `.env` (gitignored); `secrets.py` loader expands `${VAR}`
+- All secrets in `.env` (gitignored); `config.py` loader expands `${VAR}`
   placeholders in `config/*.json`
 - Bookmark API validates ID pattern (`^[a-zA-Z0-9_-]{1,64}$`), caps request
   body at 1 KB, caps bookmark list at 5,000

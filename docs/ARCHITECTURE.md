@@ -72,7 +72,7 @@ Owns the SQLite connection lifecycle, schema migrations, and all read/write help
 
 Connection mode is WAL (`PRAGMA journal_mode=WAL`) for concurrent reads + crash safety. The connection is opened once per process and reused.
 
-### `secrets.py` — env + config loader
+### `config.py` — env + config loader
 
 The single reader of `config/*.json` and `.env`. The order of precedence is documented in the README. Key functions:
 
@@ -248,7 +248,7 @@ The roadmap includes an embedding-based classifier as a future option for users 
 | Scraper returns malformed HTML         | Parser exception, caught     | Article skipped, logged                        |
 | Scraper returns 4xx/5xx                | `fetch_json` returns None    | Retried 3x with backoff, then skipped         |
 | SQLite disk full                       | `sqlite3.OperationalError`   | Pipeline exits, alert in `pipeline.log`       |
-| `.env` missing or malformed            | `secrets.py` returns empty   | Scrapers with required keys are skipped       |
+| `.env` missing or malformed            | `config.py` returns empty   | Scrapers with required keys are skipped       |
 | Telegram API rate limit                | `sendMessage` returns 429    | Retried with backoff in the same run          |
 | Dashboard server not running           | Bot callback to `/api/...` fails | Bookmark save from Telegram fails silently |
 | `news.db` corruption                    | `sqlite3.DatabaseError`      | Delete `news.db`, re-run pipeline, rebuilds   |

@@ -30,7 +30,7 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 
 ### Security
 
-- All secrets in `.env` (gitignored); `secrets.py` loader expands `${VAR}` placeholders in `config/*.json`.
+- All secrets in `.env` (gitignored); `config.py` loader expands `${VAR}` placeholders in `config/*.json`.
 - Bookmark API validates ID pattern (`^[a-zA-Z0-9_-]{1,64}$`), caps request body at 1 KB, caps bookmark list at 5,000.
 - All file writes (bookmarks, dashboard data, scheduler state) are atomic (temp + `os.replace`).
 - HTTP responses carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` for API endpoints.

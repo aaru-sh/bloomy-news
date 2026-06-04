@@ -48,7 +48,7 @@ bloomy-news/
 │
 ├── database.py                 SQLite layer: articles, dedup_log, FTS5, Jaccard
 ├── news_tool.py                pipeline: 8 scrapers, classifier, dedup, telegram poster
-├── secrets.py                  env + config loader with ${VAR} expansion
+├── config.py                    env + config loader with ${VAR} expansion (renamed from secrets.py)
 │
 ├── scripts/
 │   ├── check_system.py         health check (Python version, deps, .env, news.db)
@@ -106,6 +106,6 @@ bloomy-news/
 | Add a category            | `news_tool.py` (CATEGORIES + CATEGORY_KEYWORDS) + `config/categories.json` + all 3 `dashboard/app*.js` |
 | Add a dashboard page      | `dashboard/<name>.html` + `dashboard/app-<name>.js` + register in `dashboard/serve.py` |
 | Add a Telegram sub-channel| `.env` (add `TELEGRAM_<NAME>_CHANNEL_ID`) + `config/telegram.json` |
-| Add an env var            | `.env.example` + `secrets.py` (loader) + `docs/CONFIGURATION.md` |
+| Add an env var            | `.env.example` + `config.py` (loader) + `docs/CONFIGURATION.md` |
 | Change the 12h cadence    | `scripts/scheduler.py` (CHECKPOINT_HOURS tuple)          |
 | Change the dedup threshold| `database.py` (JACCARD_THRESHOLD constant) + `docs/DEDUP.md` |

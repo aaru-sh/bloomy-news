@@ -101,7 +101,7 @@ Both helpers log the error and return `None`. Scraper code checks for `None` and
 Before writing code, answer:
 
 - **What's the URL pattern?** (RSS, JSON API, or HTML page to parse)
-- **Does it need an API key?** If yes, add it to `config/sources.json` and `.env.example`, and add a `secrets.py` getter.
+- **Does it need an API key?** If yes, add it to `config/sources.json` and `.env.example`, and add a `config.py` getter.
 - **How many articles per run?** Aim for 5-15. More floods the dashboard; fewer misses interesting items.
 - **What's the article shape?** Map it to the canonical shape (id, title, summary, url, source, published).
 
@@ -169,7 +169,7 @@ If the scraper has multiple sources, list them in `config/sources.json`:
 }
 ```
 
-And have the scraper iterate over `config["reddit_rss"]`. The `secrets.py` loader gives you the parsed config via `load_config("sources.json")` (or you can read it directly with `json.load(open(...))` since the file is in the project root).
+And have the scraper iterate over `config["reddit_rss"]`. The `config.py` loader gives you the parsed config via `load_config("sources.json")` (or you can read it directly with `json.load(open(...))` since the file is in the project root).
 
 ### 5. Add a test
 

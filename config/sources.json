@@ -1,5 +1,5 @@
 {
-  "_comment": "API keys and bot token live in .env (see .env.example). Keys below are env placeholders; the secrets.py loader expands them at runtime. Channel IDs and source URLs are public config.",
+  "_comment": "API keys and bot token live in .env (see .env.example). Keys below are env placeholders; the config.py loader expands them at runtime. Channel IDs and source URLs are public config.",
   "newsapi_key": "${NEWS_API_KEY}",
   "finnhub_key": "${FINNHUB_API_KEY}",
   "arxiv_rss": {
