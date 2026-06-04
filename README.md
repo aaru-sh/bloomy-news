@@ -122,7 +122,9 @@ cd Bloomy-news
 pip install -r requirements.txt
 ```
 
-The dependency list is intentionally minimal — `requests`, `feedparser`, `python-dateutil`. Everything else is in the Python standard library.
+The dependency list is intentionally minimal — only `requests` (used by the Telegram bot and the system health check). Everything else is in the Python standard library: `sqlite3`, `urllib.request`, `http.server`, `json`, `re`, `hashlib`, `gzip`, `argparse`, `subprocess`, `logging`, `pathlib`, `datetime`, `collections`.
+
+You can also install via `pip install -e .` (uses `pyproject.toml`); behavior is identical to `pip install -r requirements.txt`.
 
 ### 3. Configure secrets (optional)
 
@@ -374,6 +376,7 @@ Bloomy-news/
 ├── database.py                 SQLite layer: articles, dedup_log, FTS5, Jaccard
 ├── secrets.py                  env + config loader with ${VAR} expansion
 ├── requirements.txt            requests (for Telegram bot + system check)
+├── pyproject.toml              PEP 621 metadata; `pip install -e .` works
 ├── .env.example                template for the 3 optional API keys
 ├── .gitignore
 ├── LICENSE                     MIT
@@ -403,7 +406,8 @@ Bloomy-news/
 │   └── data/                   runtime-generated (gitignored except .gitkeep)
 │
 ├── tests/
-│   └── test_fixes.py           18 unit tests
+│   ├── test_fixes.py           18 unit tests
+│   └── test_fresh_install.py   12 fresh-install + server smoke tests
 │
 ├── logs/                       runtime logs (gitignored)
 │
@@ -420,11 +424,13 @@ Bloomy-news/
 │   ├── CLASSIFIER.md
 │   └── DEDUP.md
 │
-└── .github/                    GitHub templates
+└── .github/                    GitHub templates + CI
     ├── ISSUE_TEMPLATE/
     │   ├── bug_report.md
     │   └── feature_request.md
-    └── PULL_REQUEST_TEMPLATE.md
+    ├── PULL_REQUEST_TEMPLATE.md
+    └── workflows/
+        └── test.yml            CI: unit tests + smoke on Python 3.8-3.12
 ```
 
 ---
@@ -450,6 +456,8 @@ make test
 - **Fresh-install** — all 5 module paths derive from `__file__` (no hardcoded `E:\`); `init_db()` creates the schema at the project root; `serve.py` returns valid empty JSON when `dashboard_data.json` is missing; the bookmark API accepts/validates IDs end-to-end over a real HTTP server.
 
 For a user-facing health check (no test runner required), see `python scripts/smoke_test.py` (`make smoke`) — it's the same idea as the fresh-install test, but packaged as a single command for end users.
+
+CI: `.github/workflows/test.yml` runs the full 30-test suite + the 10-check smoke test on every push and PR, across Python 3.8 – 3.12 on Ubuntu.
 
 ### Common tasks (Makefile)
 
