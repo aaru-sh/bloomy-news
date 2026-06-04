@@ -1,4 +1,4 @@
-"""Smoke tests for the most critical fixes in Bloomsberg News."""
+﻿"""Smoke tests for the most critical fixes in Bloomy News."""
 import os
 import sys
 import json

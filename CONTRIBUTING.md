@@ -1,4 +1,4 @@
-# Contributing to Bloomsberg News
+﻿# Contributing to Bloomy News
 
 Thanks for your interest in contributing. This document explains how to report bugs, request features, and submit code changes.
 
@@ -38,8 +38,8 @@ Open a [feature request](../../issues/new?template=feature_request.md). Please i
 ### Setting up a development environment
 
 ```bash
-git clone https://github.com/<your-username>/bloomsberg-news.git
-cd bloomsberg-news
+git clone https://github.com/<your-username>/Bloomy-news.git
+cd Bloomy-news
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt

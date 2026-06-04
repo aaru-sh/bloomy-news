@@ -1,4 +1,4 @@
-# Scrapers
+﻿# Scrapers
 
 This document explains how the existing scrapers work and how to add a new one.
 
@@ -74,7 +74,7 @@ All scrapers use the `fetch_json()` and `fetch_text()` helpers at the top of `ne
 def fetch_json(url, timeout=15):
     """GET url, parse JSON, return dict. None on any error."""
     try:
-        r = requests.get(url, timeout=timeout, headers={"User-Agent": "Bloomsberg/1.0"})
+        r = requests.get(url, timeout=timeout, headers={"User-Agent": "Bloomy/1.0"})
         r.raise_for_status()
         return r.json()
     except (requests.RequestException, ValueError) as e:
@@ -84,7 +84,7 @@ def fetch_json(url, timeout=15):
 def fetch_text(url, timeout=15):
     """GET url, return text. None on any error."""
     try:
-        r = requests.get(url, timeout=timeout, headers={"User-Agent": "Bloomsberg/1.0"})
+        r = requests.get(url, timeout=timeout, headers={"User-Agent": "Bloomy/1.0"})
         r.raise_for_status()
         return r.text
     except requests.RequestException as e:

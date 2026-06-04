@@ -1,4 +1,4 @@
-# Bloomsberg News
+﻿# Bloomy News
 
 A self-hosted news aggregation pipeline that scrapes 8 sources, classifies articles into 6 categories, deduplicates intelligently, and surfaces the result in a local dashboard and a Telegram digest — running unattended on a 12-hour cadence.
 
@@ -34,7 +34,7 @@ A self-hosted news aggregation pipeline that scrapes 8 sources, classifies artic
 
 ## Why this exists
 
-Most "news aggregator" projects either pull from a single source, dump everything into one bucket, or require a hosted backend. **Bloomsberg News** is built for a single user running it on their own machine — no cloud, no accounts beyond the free-tier API keys, no LAN exposure. It pulls from academic preprints, security blogs, general tech news, and financial feeds, then routes each article to the right sub-channel in Telegram and the right filter in the dashboard.
+Most "news aggregator" projects either pull from a single source, dump everything into one bucket, or require a hosted backend. **Bloomy News** is built for a single user running it on their own machine — no cloud, no accounts beyond the free-tier API keys, no LAN exposure. It pulls from academic preprints, security blogs, general tech news, and financial feeds, then routes each article to the right sub-channel in Telegram and the right filter in the dashboard.
 
 The whole stack is one Python project, one local SQLite file, and one HTTP server bound to `127.0.0.1`. It runs itself twice a day via a Windows-scheduler-style loop, and catches up gracefully if the laptop was off at the scheduled time.
 
@@ -106,8 +106,8 @@ The pipeline works with **zero API keys** — the optional keys (Telegram, NewsA
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/bloomsberg-news.git
-cd bloomsberg-news
+git clone https://github.com/<your-username>/Bloomy-news.git
+cd Bloomy-news
 ```
 
 ### 2. Install Python dependencies
@@ -234,7 +234,7 @@ Serving on http://127.0.0.1:8080
 ### Scheduler commands
 
 ```bash
-python scripts/scheduler.py --install   # one-time: register HKCU\...\Run\BloomsbergScheduler
+python scripts/scheduler.py --install   # one-time: register HKCU\...\Run\BloomyScheduler
 python scripts/scheduler.py --status    # show last-run state
 python scripts/scheduler.py --run-now   # run pipeline once and exit
 python scripts/scheduler.py              # foreground loop (Ctrl-C to stop)
@@ -350,7 +350,7 @@ The `news.db` file is the source of truth at runtime. The `.md.gz` archives are 
 ## Project structure
 
 ```
-bloomsberg-news/
+Bloomy-news/
 ├── LAUNCH_DAILY.bat            one-shot health+server+pipeline+regen (Windows)
 ├── news_tool.py                pipeline: 8 scrapers, classifier, dedup, telegram poster
 ├── database.py                 SQLite layer: articles, dedup_log, FTS5, Jaccard
@@ -460,10 +460,10 @@ See [docs/SCRAPERS.md](docs/SCRAPERS.md) for the full guide. Short version:
 python scripts/scheduler.py --install
 ```
 
-This registers `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\BloomsbergScheduler` with the value:
+This registers `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\BloomyScheduler` with the value:
 
 ```
-C:\Path\To\pythonw.exe "E:\Path\To\bloomsberg-news\scripts\scheduler.py"
+C:\Path\To\pythonw.exe "E:\Path\To\Bloomy-news\scripts\scheduler.py"
 ```
 
 On every login, Windows starts the scheduler in the background (no console window, `pythonw.exe`). The scheduler then loops forever, running the pipeline at midnight and noon local time, with startup catch-up.
@@ -475,7 +475,7 @@ To remove: `python scripts/scheduler.py --uninstall`.
 The scheduler works as a foreground loop. Wrap it with your platform's init system:
 
 - **systemd** — create a user service that runs `python scripts/scheduler.py`
-- **cron** — add `0 0,12 * * * cd /path/to/bloomsberg-news && python news_tool.py && python dashboard/generate_data.py`
+- **cron** — add `0 0,12 * * * cd /path/to/Bloomy-news && python news_tool.py && python dashboard/generate_data.py`
 - **launchd** — create a `LaunchAgent` plist
 
 The `scripts/scheduler.py --status` command works the same on all platforms.

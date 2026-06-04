@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Telegram Bot - Posts daily digest with inline keyboards to channel and sub-channels."""
 import json
 import html
@@ -143,7 +143,7 @@ def format_main_digest(articles_by_category, today_counts):
     total = sum(len(v) for v in articles_by_category.values())
 
     lines = []
-    lines.append(f"\U0001f4f0 <b>Bloomsberg Daily</b> \u2014 {today}")
+    lines.append(f"\U0001f4f0 <b>Bloomy Daily</b> \u2014 {today}")
     lines.append("")
 
     for cat in CATEGORIES:
@@ -168,7 +168,7 @@ def format_main_digest(articles_by_category, today_counts):
         lines.append("\u2500" * 28)
 
     lines.append(f"<b>{total} articles total</b>")
-    lines.append(f"\U0001f4ca Full archive: @bloomsberg_news_archive")
+    lines.append(f"\U0001f4ca Full archive: @Bloomy_news_archive")
 
     return "\n".join(lines)
 

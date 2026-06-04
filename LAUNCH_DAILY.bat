@@ -1,9 +1,9 @@
-@echo off
-title Bloomsberg News - Daily Launcher
+﻿@echo off
+title Bloomy News - Daily Launcher
 setlocal
 
 echo ==========================================
-echo   Bloomsberg News - Starting Up
+echo   Bloomy News - Starting Up
 echo ==========================================
 echo.
 

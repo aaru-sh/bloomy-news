@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-"""System health check for Bloomsberg News."""
+﻿#!/usr/bin/env python3
+"""System health check for Bloomy News."""
 import os
 import sys
 import sqlite3
@@ -68,7 +68,7 @@ def check_disk():
 
 def main():
     print("=" * 50)
-    print("Bloomsberg News - System Health Check")
+    print("Bloomy News - System Health Check")
     print("=" * 50)
     
     checks = {
