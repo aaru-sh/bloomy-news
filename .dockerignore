@@ -1,0 +1,52 @@
+# Bloomy News — keep the Docker image lean.
+# See https://docs.docker.com/engine/reference/builder/#dockerignore-file
+
+# VCS
+.git
+.gitignore
+.github
+.gitattributes
+
+# Docs (not needed in image; README is COPY'd explicitly if desired)
+docs/
+*.md
+LICENSE
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime / state
+news.db
+news.db-journal
+dashboard/data/*.json
+.env
+.env.local
+.env.*.local
+
+# Virtualenvs
+venv/
+.venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+*.spec
