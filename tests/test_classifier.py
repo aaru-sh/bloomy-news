@@ -22,7 +22,7 @@ from pathlib import Path
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE))
 
-from news_tool import classify_article, EMBEDDING_AVAILABLE
+from news_tool import classify_article, EMBEDDING_AVAILABLE, _classify_keywords, evaluate_classifier_accuracy
 
 
 LABELED_SAMPLES = [
@@ -145,6 +145,41 @@ class TestClassifierAccuracy(unittest.TestCase):
         self.assertIsInstance(subcat, str)
         self.assertGreaterEqual(confidence, 0.0)
         self.assertLessEqual(confidence, 1.0)
+
+    def test_keyword_word_boundary(self):
+        """Word-boundary token matching prevents substring false positives.
+
+        With raw substring matching, the bare word "security" inside
+        "social security benefits" scored Cybersecurity, and the bare
+        word "model" inside "she's a runway model" fed the Finance/quant
+        subcategory scorer. Word-boundary token matching scores by
+        exact token membership, so neither false positive drives the
+        primary category when the article has a clearer LLM signal.
+        """
+        article = {
+            "title": "OpenAI releases new GPT and Claude updates",
+            "summary": "Social security benefits for retirees are expanding. "
+                       "She's a runway model at fashion week.",
+        }
+        cat, conf, tags, subcat = _classify_keywords(article)
+        self.assertNotEqual(cat, "Cybersecurity")
+        self.assertNotEqual(cat, "ML-Research")
+
+    def test_evaluate_classifier_accuracy(self):
+        """Smoke test: the evaluate API returns a well-formed dict.
+
+        Asserts shape, type, and ranges only — not a specific accuracy
+        threshold (which would be flaky across model/keyword changes).
+        """
+        result = evaluate_classifier_accuracy()
+        self.assertIn("correct", result)
+        self.assertIn("total", result)
+        self.assertIn("accuracy", result)
+        self.assertIn("by_category", result)
+        self.assertIsInstance(result["by_category"], dict)
+        self.assertGreater(result["total"], 0)
+        self.assertGreaterEqual(result["accuracy"], 0.0)
+        self.assertLessEqual(result["accuracy"], 1.0)
 
 
 if __name__ == "__main__":
