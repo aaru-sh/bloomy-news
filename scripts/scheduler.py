@@ -12,7 +12,20 @@ Run modes:
   python scripts/scheduler.py            # run in foreground
   python scripts/scheduler.py --install  # install as Windows autostart
   python scripts/scheduler.py --uninstall
-  python scripts.scheduler.py --run-now  # run pipeline once and exit
+  python scripts/scheduler.py --run-now  # run pipeline once and exit
+  python scripts/scheduler.py --verify   # read-only diagnostic (6 checks)
+
+--verify is a read-only diagnostic. It reads the registered autostart
+entry from the Windows registry and confirms:
+  1. the registered python.exe path exists and is launchable
+  2. the registered repo path (cwd at install time) is reachable
+  3. the database file is writable
+  4. the .env file is present (only if .env.example exists in the repo)
+  5. the autostart entry is registered
+Prints one pass/fail line per check and exits 0 if all pass, 1 otherwise.
+--install runs --verify automatically after registering, so silent
+failures (e.g. a moved venv, broken path encoding) surface at install
+time instead of at the first scheduled run.
 """
 import argparse
 import json
@@ -40,6 +53,7 @@ SLEEP_CHUNK = 30
 
 REG_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 REG_VALUE_NAME = "BloomyScheduler"
+REG_CWD_VALUE = "BloomySchedulerCwd"
 
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -206,7 +220,15 @@ def get_pythonw_path():
 
 def install_autostart():
     """Install the scheduler as a Windows autostart entry.
-    Writes HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\BloomyScheduler.
+
+    Writes HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\BloomyScheduler
+    plus a companion BloomySchedulerCwd value that records the project root
+    at install time (used by --verify to detect a moved repo).
+
+    After registering, runs --verify so silent failures (moved venv, broken
+    path encoding) surface at install time instead of at first scheduled run.
+    Returns 0 only if the registry write AND the post-install verify both
+    succeed; returns 1 otherwise.
     """
     if os.name != "nt":
         print("Auto-install only supported on Windows.")
@@ -220,58 +242,184 @@ def install_autostart():
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
             winreg.SetValueEx(key, REG_VALUE_NAME, 0, winreg.REG_SZ, cmd)
-        print(f"Installed: HKCU\\{REG_RUN_KEY}\\{REG_VALUE_NAME} = {cmd}")
-        return 0
+            winreg.SetValueEx(key, REG_CWD_VALUE, 0, winreg.REG_SZ, str(BASE))
     except OSError as e:
         print(f"Install failed: {e}")
         return 1
 
+    print(f"Installed: HKCU\\{REG_RUN_KEY}\\{REG_VALUE_NAME} = {cmd}")
+    print()
+    verify_rc = verify_install()
+    if verify_rc != 0:
+        print()
+        print("Install succeeded but verification reported issues. Re-run --install after fixing the cause above.")
+    return verify_rc
 
-def verify_install():
-    """Read the registry value and confirm the pythonw path still exists.
 
-    Returns 0 if installed and the pythonw path resolves, 1 if installed
-    but the pythonw path is broken, 2 if not installed.
+def collect_verify_results():
+    """Read-only diagnostic. Returns a list of (name, ok, message) tuples.
+
+    Reads the registered autostart value (HKCU\\...\\Run\\BloomyScheduler)
+    and the companion BloomySchedulerCwd value (recorded at install time),
+    parses the python and script paths, and reports on:
+      1. python path exists
+      2. python is launchable and reports a version
+      3. repo path (recorded at install time) is reachable
+      4. database file is writable
+      5. .env exists (only if .env.example is present in the repo)
+      6. autostart entry is registered
     """
     if os.name != "nt":
-        print("Verify only supported on Windows.")
-        return 0
+        return [("platform", False, "verify is Windows-only")]
+
     import winreg
+    import shlex
+
+    value = None
+    cwd_value = None
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY, 0, winreg.KEY_READ) as key:
             try:
                 value, _ = winreg.QueryValueEx(key, REG_VALUE_NAME)
             except FileNotFoundError:
-                print("Not installed.")
-                return 2
+                value = None
+            try:
+                cwd_value, _ = winreg.QueryValueEx(key, REG_CWD_VALUE)
+            except FileNotFoundError:
+                cwd_value = None
     except OSError as e:
-        print(f"Verify failed: {e}")
-        return 1
+        return [("autostart entry", False, f"registry open failed: {e}")]
 
-    print(f"Registry value: {value}")
-    import shlex
+    if value is None:
+        return [(
+            "autostart entry",
+            False,
+            f"not registered at HKCU\\{REG_RUN_KEY}\\{REG_VALUE_NAME} (run --install)",
+        )]
+
     try:
         parts = shlex.split(value)
-        pythonw = Path(parts[0]) if parts else None
-        script = Path(parts[1]) if len(parts) > 1 else None
-    except ValueError:
-        print("[WARN] Could not parse registry value")
-        return 1
+    except ValueError as e:
+        return [("autostart command", False, f"could not parse: {e}")]
 
-    if pythonw and pythonw.exists():
-        print(f"[OK] pythonw path exists: {pythonw}")
+    python_path = Path(parts[0]) if parts and parts[0] else None
+    script_path = Path(parts[1]) if len(parts) > 1 and parts[1] else None
+
+    results = []
+
+    # 1. Python path exists
+    if python_path:
+        if python_path.is_file():
+            results.append(("python path exists", True, str(python_path)))
+        else:
+            results.append(("python path exists", False, f"{python_path} not found"))
     else:
-        print(f"[FAIL] pythonw path missing: {pythonw}")
-        return 1
+        results.append(("python path exists", False, "no python path in registry value"))
 
-    if script and script.exists():
-        print(f"[OK] script path exists: {script}")
+    # 2. Python launchable and reports a version
+    if python_path and python_path.is_file():
+        try:
+            r = subprocess.run(
+                [str(python_path), "--version"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if r.returncode == 0:
+                out = (r.stdout or "").strip()
+                err = (r.stderr or "").strip()
+                ver = out or err or "ok"
+                results.append(("python launchable", True, ver))
+            else:
+                results.append(("python launchable", False, f"exit {r.returncode}"))
+        except subprocess.TimeoutExpired:
+            results.append(("python launchable", False, "timed out after 10s"))
+        except (FileNotFoundError, OSError) as e:
+            results.append(("python launchable", False, str(e)))
     else:
-        print(f"[FAIL] script path missing: {script}")
-        return 1
+        results.append(("python launchable", False, "skipped: python path missing"))
 
-    print("[OK] Scheduler install verified.")
-    return 0
+    # 3. Repo path reachable. Prefer the cwd captured at install time;
+    # fall back to the parent of the registered script (which is always at
+    # <repo>/scripts/scheduler.py per the BASE constant).
+    if cwd_value:
+        repo_path = Path(cwd_value)
+    elif script_path:
+        repo_path = script_path.parent.parent
+    else:
+        repo_path = None
+
+    if repo_path:
+        if repo_path.is_dir():
+            results.append(("repo path reachable", True, str(repo_path)))
+        else:
+            results.append(("repo path reachable", False, f"{repo_path} not a directory"))
+    else:
+        results.append(("repo path reachable", False, "no repo path captured at install time"))
+
+    # 4. Database writable
+    if repo_path and repo_path.is_dir():
+        db_path = repo_path / "news.db"
+        try:
+            with open(str(db_path), "a"):
+                pass
+            results.append(("database writable", True, str(db_path)))
+        except OSError as e:
+            results.append(("database writable", False, f"{db_path}: {e}"))
+    else:
+        results.append(("database writable", False, "skipped: repo path missing"))
+
+    # 5. .env present (only if .env.example exists)
+    if repo_path and repo_path.is_dir():
+        env_example = repo_path / ".env.example"
+        env_file = repo_path / ".env"
+        if env_example.is_file():
+            if env_file.is_file():
+                results.append((".env file present", True, str(env_file)))
+            else:
+                results.append((
+                    ".env file present",
+                    False,
+                    f"{env_file} not found (copy from .env.example)",
+                ))
+        # else: not all installs use .env, so this check is intentionally skipped
+    else:
+        results.append((".env file present", False, "skipped: repo path missing"))
+
+    # 6. Autostart registered (this codebase uses HKCU Run key, not Task Scheduler)
+    results.append((
+        "autostart registered",
+        True,
+        f"HKCU\\{REG_RUN_KEY}\\{REG_VALUE_NAME}",
+    ))
+
+    return results
+
+
+def render_verify_results(results):
+    """Print one pass/fail line per tuple. Returns True if all pass."""
+    all_ok = True
+    for name, ok, message in results:
+        marker = "PASS" if ok else "FAIL"
+        print(f"  [{marker}] {name}: {message}")
+        if not ok:
+            all_ok = False
+    return all_ok
+
+
+def verify_install():
+    """Read-only diagnostic. Exits 0 if all checks pass, 1 otherwise.
+
+    Reads the registered autostart value from the registry, parses the
+    python and script paths, and runs 6 checks (python path, python
+    launchable, repo path, database writable, .env present, autostart
+    registered). On failure, prints a one-line remediation hint.
+    """
+    print("Scheduler verification:")
+    results = collect_verify_results()
+    all_ok = render_verify_results(results)
+    if not all_ok:
+        print()
+        print("Action: python scripts/scheduler.py --uninstall && python scripts/scheduler.py --install")
+    return 0 if all_ok else 1
 
 
 def uninstall_autostart():
@@ -283,7 +431,11 @@ def uninstall_autostart():
         with winreg.OpenKey(
             winreg.HKEY_CURRENT_USER, REG_RUN_KEY, 0, winreg.KEY_SET_VALUE
         ) as key:
-            winreg.DeleteValue(key, REG_VALUE_NAME)
+            for name in (REG_VALUE_NAME, REG_CWD_VALUE):
+                try:
+                    winreg.DeleteValue(key, name)
+                except FileNotFoundError:
+                    pass
         print("Uninstalled.")
         return 0
     except FileNotFoundError:
@@ -300,7 +452,7 @@ def main():
     parser.add_argument("--uninstall", action="store_true", help="Remove autostart")
     parser.add_argument("--run-now", action="store_true", help="Run pipeline once and exit")
     parser.add_argument("--status", action="store_true", help="Print state and exit")
-    parser.add_argument("--verify", action="store_true", help="Verify the Windows autostart install")
+    parser.add_argument("--verify", action="store_true", help="Read-only diagnostic: 6 checks (python, repo, db, .env, autostart). Exits 1 on any failure.")
     args = parser.parse_args()
 
     if args.install:
