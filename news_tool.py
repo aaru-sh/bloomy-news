@@ -14,11 +14,17 @@ import sys
 from pathlib import Path
 from datetime import datetime, date
 from collections import defaultdict
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
 
 import database
 from config import get_telegram_token, get_newsapi_key, get_finnhub_key
 
 BASE = Path(__file__).parent.resolve()
+
+Article = Dict[str, Any]
+ArticleList = List[Article]
+CategoryMap = Dict[str, ArticleList]
+ClassifyResult = Tuple[str, float, List[str], str, Any]
 
 KEYWORD_MINIMUM_ACCURACY = 0.80
 EMBEDDING_MINIMUM_ACCURACY = 0.95
@@ -113,23 +119,23 @@ STOPWORDS = frozenset({
 _TOKEN_RE = re.compile(r"\b[\w'-]+\b")
 
 
-def _tokenize(text):
+def _tokenize(text: str) -> FrozenSet[str]:
     """Lowercase + tokenize text into a frozenset of word tokens."""
     if not text:
         return frozenset()
     return frozenset(_TOKEN_RE.findall(text.lower()))
 
 
-def _keyword_tokens(keyword):
+def _keyword_tokens(keyword: str) -> FrozenSet[str]:
     """Lowercase + tokenize a keyword into a frozenset of word tokens."""
     if not keyword:
         return frozenset()
     return frozenset(_TOKEN_RE.findall(keyword.lower()))
 
 
-def _filter_keywords(keywords):
+def _filter_keywords(keywords: List[str]) -> List[str]:
     """Drop keywords that are < 3 chars or composed entirely of stopwords."""
-    result = []
+    result: List[str] = []
     for kw in keywords:
         if len(kw) < 3:
             continue
@@ -163,12 +169,12 @@ SOURCE_NAMES = {
     "reuters": "Reuters",
 }
 
-def fetch_url(url, timeout=20, retries=3):
+def fetch_url(url: str, timeout: int = 20, retries: int = 3) -> Optional[str]:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/rss+xml, application/xml, text/xml, */*",
     }
-    
+
     for attempt in range(retries):
         try:
             req = urllib.request.Request(url, headers=headers)
@@ -178,11 +184,11 @@ def fetch_url(url, timeout=20, retries=3):
             logger.warning(f"Attempt {attempt + 1}/{retries} failed for {url}: {e}")
             if attempt < retries - 1:
                 time.sleep(2 ** attempt)
-    
+
     logger.error(f"All {retries} attempts failed for {url}")
     return None
 
-def fetch_json(url, timeout=20):
+def fetch_json(url: str, timeout: int = 20) -> Any:
     content = fetch_url(url, timeout)
     if content:
         try:
@@ -191,11 +197,11 @@ def fetch_json(url, timeout=20):
             return None
     return None
 
-def _parse_rss_regex(xml_text, source_key):
+def _parse_rss_regex(xml_text: str, source_key: str) -> ArticleList:
     """Regex-based RSS/Atom parser (legacy fallback). Used only when
     feedparser raises an unexpected exception. Kept for parity with
     the v1.1.x behavior locked in by tests/test_scraper_*.py."""
-    articles = []
+    articles: ArticleList = []
     source_name = SOURCE_NAMES.get(source_key, source_key)
 
     items = re.findall(r'<item>(.*?)</item>', xml_text, re.DOTALL)
@@ -253,7 +259,7 @@ def _parse_rss_regex(xml_text, source_key):
     return articles
 
 
-def parse_rss(xml_text, source_key):
+def parse_rss(xml_text: str, source_key: str) -> ArticleList:
     """Parse an RSS or Atom feed into the canonical article dict shape.
 
     Primary path uses feedparser (handles RSS 2.0, RSS 1.0, Atom, all
@@ -268,7 +274,7 @@ def parse_rss(xml_text, source_key):
     try:
         import feedparser
         feed = feedparser.parse(xml_text)
-        articles = []
+        articles: ArticleList = []
         source_name = SOURCE_NAMES.get(source_key, source_key)
         for entry in feed.entries[:20]:
             title = (getattr(entry, "title", "") or "").strip()
@@ -316,7 +322,7 @@ def parse_rss(xml_text, source_key):
         )
         return _parse_rss_regex(xml_text, source_key)
 
-def scrape_arxiv():
+def scrape_arxiv() -> ArticleList:
     # arXiv asks for >= 3 seconds between requests; configurable via ARXIV_RATE_LIMIT env var.
     rate_limit = float(os.environ.get('ARXIV_RATE_LIMIT', '3.0'))
     print("  [1/8] arXiv ML/AI papers...")
@@ -335,7 +341,7 @@ def scrape_arxiv():
         ("https://rss.arxiv.org/rss/q-fin.ST", "q-fin.ST"),
         ("https://rss.arxiv.org/rss/cs.CR", "cs.CR"),
     ]
-    articles = []
+    articles: ArticleList = []
     for i, (url, cat) in enumerate(feeds):
         if i > 0:
             time.sleep(rate_limit)
@@ -348,7 +354,7 @@ def scrape_arxiv():
     print(f"    Found {len(articles)} papers")
     return articles
 
-def scrape_github():
+def scrape_github() -> ArticleList:
     print("  [2/8] GitHub trending...")
     articles = []
     for lang in ["python", "jupyter-notebook", "rust"]:
@@ -389,7 +395,7 @@ def scrape_github():
     print(f"    Found {len(articles)} repos")
     return articles
 
-def scrape_newsapi():
+def scrape_newsapi() -> ArticleList:
     print("  [3/8] NewsAPI...")
     api_key = get_newsapi_key()
 
@@ -397,7 +403,7 @@ def scrape_newsapi():
         print("    Skipped - no API key")
         return []
 
-    articles = []
+    articles: ArticleList = []
     for cat in ["technology", "science", "business"]:
         url = f"https://newsapi.org/v2/top-headlines?country=us&category={cat}&pageSize=15&apiKey={api_key}"
         data = fetch_json(url)
@@ -414,7 +420,7 @@ def scrape_newsapi():
     print(f"    Found {len(articles)} articles")
     return articles
 
-def scrape_cybersec():
+def scrape_cybersec() -> ArticleList:
     print("  [4/8] Cybersecurity feeds...")
     feeds = [
         ("https://feeds.feedburner.com/TheHackersNews", "thehackersnews"),
@@ -429,11 +435,11 @@ def scrape_cybersec():
     print(f"    Found {len(articles)} articles")
     return articles
 
-def scrape_finance():
+def scrape_finance() -> ArticleList:
     print("  [5/8] Finance news...")
     api_key = get_finnhub_key()
 
-    articles = []
+    articles: ArticleList = []
 
     if api_key and not api_key.startswith("YOUR_"):
         url = f"https://finnhub.io/api/v1/news?category=general&token={api_key}"
@@ -461,14 +467,14 @@ def scrape_finance():
     print(f"    Found {len(articles)} articles")
     return articles
 
-def scrape_tech():
+def scrape_tech() -> ArticleList:
     print("  [6/8] Tech news...")
     feeds = [
         ("https://techcrunch.com/feed/", "techcrunch"),
         ("https://www.theverge.com/rss/index.xml", "theverge"),
         ("https://arstechnica.com/feed/", "arstechnica"),
     ]
-    articles = []
+    articles: ArticleList = []
     for url, key in feeds:
         content = fetch_url(url)
         if content:
@@ -476,7 +482,7 @@ def scrape_tech():
     print(f"    Found {len(articles)} articles")
     return articles
 
-def resolve_google_news_redirect(url, timeout=10):
+def resolve_google_news_redirect(url: str, timeout: int = 10) -> str:
     """Resolve a Google News redirect URL to the actual article URL.
 
     Google News RSS emits URLs like
@@ -521,14 +527,14 @@ def resolve_google_news_redirect(url, timeout=10):
     return url
 
 
-def scrape_google_news():
+def scrape_google_news() -> ArticleList:
     print("  [7/8] Google News AI/ML...")
     queries = [
         "artificial+intelligence+machine+learning",
         "cybersecurity+news",
         "stock+market+trading",
     ]
-    articles = []
+    articles: ArticleList = []
     for q in queries:
         url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
         content = fetch_url(url)
@@ -541,13 +547,13 @@ def scrape_google_news():
     print(f"    Found {len(articles)} articles")
     return articles
 
-def scrape_markets():
+def scrape_markets() -> ArticleList:
     print("  [8/8] Market data...")
     feeds = [
         ("https://www.cnbc.com/id/100003114/device/rss/rss.html", "CNBC"),
         ("https://feeds.marketwatch.com/marketwatch/topstories/", "MarketWatch"),
     ]
-    articles = []
+    articles: ArticleList = []
     for url, key in feeds:
         content = fetch_url(url)
         if content:
@@ -562,10 +568,10 @@ try:
 except ImportError:
     EMBEDDING_AVAILABLE = False
 
-_embedding_model = None
-_category_embeddings = None
+_embedding_model: Optional[Any] = None
+_category_embeddings: Optional[Dict[str, Any]] = None
 _embedding_load_failed = False
-_embedding_load_error = None
+_embedding_load_error: Optional[str] = None
 
 CATEGORY_EXAMPLES = {
     'LLM': [
@@ -657,7 +663,7 @@ CATEGORY_EXAMPLES = {
 }
 
 
-def _get_embedding_model():
+def _get_embedding_model() -> Tuple[Optional[Any], Optional[Dict[str, Any]]]:
     """Load the sentence-transformer model and pre-compute category centroids.
 
     Centroids are the mean of embeddings over a curated list of example
@@ -690,7 +696,7 @@ def _get_embedding_model():
     return _embedding_model, _category_embeddings
 
 
-def _classify_embedding(article):
+def _classify_embedding(article: Article) -> ClassifyResult:
     global EMBEDDING_AVAILABLE
     title = article.get('title', '') or ''
     summary = article.get('summary', '') or ''
@@ -707,7 +713,10 @@ def _classify_embedding(article):
     if text_norm == 0:
         return 'Uncategorized', 0.0, [], 'news', None
 
-    scores = {}
+    if cat_embs is None:
+        return 'Uncategorized', 0.0, [], 'news', None
+
+    scores: Dict[str, float] = {}
     for cat, cat_emb in cat_embs.items():
         cat_norm = np.linalg.norm(cat_emb)
         if cat_norm == 0:
@@ -715,7 +724,7 @@ def _classify_embedding(article):
         else:
             scores[cat] = float(np.dot(text_emb, cat_emb) / (text_norm * cat_norm))
 
-    best_cat = max(scores, key=scores.get)
+    best_cat = max(scores, key=lambda c: scores[c])
     best_score = scores[best_cat]
 
     if best_score < 0.15:
@@ -724,7 +733,7 @@ def _classify_embedding(article):
     return best_cat, round(best_score, 4), [best_cat], 'news', text_emb
 
 
-def _classify_keywords(article):
+def _classify_keywords(article: Article) -> ClassifyResult:
     # Multi-word keywords require ALL of their tokens to appear in the text
     # (in any order); single-word keywords require exact token membership.
     # This eliminates substring false positives (e.g. "social security" ->
@@ -732,7 +741,7 @@ def _classify_keywords(article):
     # substring "ml" inside "small").
     text_tokens = _tokenize(f"{article.get('title', '')} {article.get('summary', '')}")
 
-    def keyword_matches(kw):
+    def keyword_matches(kw: str) -> bool:
         kw_tokens = _keyword_tokens(kw)
         if not kw_tokens:
             return False
@@ -740,7 +749,7 @@ def _classify_keywords(article):
             return next(iter(kw_tokens)) in text_tokens
         return kw_tokens.issubset(text_tokens)
 
-    scores = {}
+    scores: Dict[str, int] = {}
     for cat, keywords in _FILTERED_CATEGORY_KEYWORDS.items():
         scores[cat] = sum(1 for kw in keywords if keyword_matches(kw))
 
@@ -749,7 +758,7 @@ def _classify_keywords(article):
     if max_score == 0:
         return "Uncategorized", 0.0, [], "news", None
 
-    primary = max(scores, key=scores.get)
+    primary = max(scores, key=lambda c: scores[c])
     confidence = min(max_score / 5.0, 1.0)
 
     threshold = max_score * 0.5
@@ -772,7 +781,7 @@ def _classify_keywords(article):
     return primary, confidence, tags, subcategory, None
 
 
-def classify_article(article):
+def classify_article(article: Article) -> ClassifyResult:
     if EMBEDDING_AVAILABLE:
         return _classify_embedding(article)
     return _classify_keywords(article)
@@ -784,7 +793,7 @@ TELEGRAM_EMOJIS = {"LLM": "🧠", "Neural-Nets": "🔬", "ML-Research": "📊",
 TELEGRAM_LIMIT_PER_CAT = 3
 
 
-def _select_top_articles(articles, limit=TELEGRAM_LIMIT_PER_CAT):
+def _select_top_articles(articles: ArticleList, limit: int = TELEGRAM_LIMIT_PER_CAT) -> ArticleList:
     """Pick up to `limit` articles, newest first by `published` if any
     article carries one, otherwise preserve insertion order."""
     if len(articles) <= limit:
@@ -797,7 +806,7 @@ def _select_top_articles(articles, limit=TELEGRAM_LIMIT_PER_CAT):
     return list(articles[:limit])
 
 
-def _format_digest(per_category, limit_per_cat=TELEGRAM_LIMIT_PER_CAT):
+def _format_digest(per_category: CategoryMap, limit_per_cat: int = TELEGRAM_LIMIT_PER_CAT) -> Tuple[str, int]:
     """Build the Telegram digest Markdown from a {category: [articles]} dict.
 
     Renders the canonical category order and caps each section at
@@ -832,7 +841,7 @@ def _format_digest(per_category, limit_per_cat=TELEGRAM_LIMIT_PER_CAT):
     return msg, total
 
 
-def _send_telegram_message(token, chat_id, text):
+def _send_telegram_message(token: str, chat_id: str, text: str) -> Dict[str, Any]:
     """POST a message to the Telegram Bot API and return the parsed JSON.
 
     Extracted as a module-level function so tests can monkey-patch it
@@ -851,7 +860,7 @@ def _send_telegram_message(token, chat_id, text):
         return json.loads(resp.read())
 
 
-def post_to_telegram(categorized):
+def post_to_telegram(categorized: CategoryMap) -> None:
     """Post the daily digest to Telegram.
 
     `categorized` is the dict of freshly-scraped articles this pipeline
@@ -913,7 +922,7 @@ def post_to_telegram(categorized):
         print(f"  Telegram request failed: {e}")
         logger.error(f"Telegram request failed: {e}")
 
-def main():
+def main() -> None:
     logger.info("=" * 60)
     logger.info("Bloomy NEWS EXCAVATOR - Starting")
     logger.info("=" * 60)
@@ -1014,7 +1023,7 @@ def main():
     
     logger.info(f"Pipeline complete: {len(all_articles)} scraped, {new_count} new, {dup_count} duplicates, {error_count} errors")
 
-def _load_labeled_samples():
+def _load_labeled_samples() -> List[Tuple[str, str, str]]:
     """Load LABELED_SAMPLES from tests/test_classifier.py.
 
     Importing the test module gives a single source of truth: when the
@@ -1024,6 +1033,8 @@ def _load_labeled_samples():
     import importlib.util
     test_path = BASE / "tests" / "test_classifier.py"
     spec = importlib.util.spec_from_file_location("_classifier_tests_eval", test_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("failed to load test_classifier.py for accuracy eval")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return list(mod.LABELED_SAMPLES)
@@ -1043,7 +1054,7 @@ def evaluate_classifier_accuracy(limit: int = 200) -> dict:
     keyword_correct = 0
     embedding_correct = 0
     combined_correct = 0
-    by_category = {}
+    by_category: Dict[str, Dict[str, int]] = {}
 
     for title, summary, expected in samples:
         article = {"title": title, "summary": summary}
