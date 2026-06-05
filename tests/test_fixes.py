@@ -483,5 +483,100 @@ class TestJaccardPrefilter(unittest.TestCase):
         self.assertEqual(method, 'title_similarity')
 
 
+class TestTelegramCategorizedSource(unittest.TestCase):
+    """post_to_telegram must build the digest from the `categorized` arg,
+    not from a fresh DB query — otherwise a run on a machine with leftover
+    today's articles in the DB can publish a digest that drops the
+    freshly-scraped ones."""
+
+    def setUp(self):
+        import news_tool
+        self.news_tool = news_tool
+        self._sent = []
+        self._patcher = patch.object(
+            news_tool, "_send_telegram_message",
+            side_effect=lambda token, chat_id, text: self._sent.append(
+                {"token": token, "chat_id": chat_id, "text": text}
+            ) or {"ok": True},
+        )
+        self._patcher.start()
+        self._env = patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "test_token"})
+        self._env.start()
+
+    def tearDown(self):
+        self._patcher.stop()
+        self._env.stop()
+
+    def test_uses_categorized_dict_not_db(self):
+        categorized = {
+            "LLM": [
+                {"title": "Fresh LLM breakthrough",
+                 "summary": "new transformer paper",
+                 "url": "https://example.com/llm/1",
+                 "published": "2026-06-05T10:00:00"},
+                {"title": "Fresh LLM release",
+                 "summary": "open weights",
+                 "url": "https://example.com/llm/2",
+                 "published": "2026-06-05T09:00:00"},
+            ],
+            "Finance": [
+                {"title": "Fresh market move",
+                 "summary": "fed rate cut",
+                 "url": "https://example.com/fin/1",
+                 "published": "2026-06-05T11:00:00"},
+                {"title": "Fresh earnings beat",
+                 "summary": "tech sector",
+                 "url": "https://example.com/fin/2",
+                 "published": "2026-06-05T08:00:00"},
+            ],
+        }
+        with patch.object(
+            self.news_tool.database,
+            "get_today_top_per_category",
+            return_value={"LLM": [
+                {"title": "STALE_DB_ARTICLE_should_not_appear",
+                 "summary": "", "url": ""}
+            ]},
+        ) as db_called:
+            self.news_tool.post_to_telegram(categorized)
+
+        self.assertEqual(len(self._sent), 1,
+                         "post_to_telegram should send exactly one message")
+        sent = self._sent[0]
+        self.assertEqual(sent["token"], "test_token")
+        text = sent["text"]
+        self.assertNotIn("STALE_DB_ARTICLE", text,
+                         "digest was built from DB, not from categorized")
+        for art in categorized["LLM"] + categorized["Finance"]:
+            self.assertIn(art["title"], text,
+                          f"missing fresh article: {art['title']!r}")
+        self.assertIn("*LLM*", text)
+        self.assertIn("*Finance*", text)
+        self.assertIn("Total: 4 articles", text)
+        db_called.assert_not_called()
+
+    def test_empty_categorized_falls_back_to_db_with_warning(self):
+        with patch.object(
+            self.news_tool.logger, "warning"
+        ) as warn_mock, patch.object(
+            self.news_tool.database,
+            "get_today_top_per_category",
+            return_value={"Cybersecurity": [
+                {"title": "DB fallback article",
+                 "summary": "breach report",
+                 "url": "https://example.com/sec/1",
+                 "published": "2026-06-05T07:00:00"},
+            ]},
+        ) as db_called:
+            self.news_tool.post_to_telegram({})
+
+        self.assertEqual(len(self._sent), 1)
+        self.assertIn("DB fallback article", self._sent[0]["text"])
+        self.assertIn("*Cybersecurity*", self._sent[0]["text"])
+        self.assertTrue(warn_mock.called,
+                        "fallback path must log a warning")
+        db_called.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()
