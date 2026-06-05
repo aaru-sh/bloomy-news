@@ -4,6 +4,7 @@ import sys
 import json
 import sqlite3
 import tempfile
+import time
 import unittest
 import threading
 from datetime import datetime, timedelta
@@ -493,6 +494,90 @@ class TestClassifierVisibility(unittest.TestCase):
         self.assertIsInstance(news_tool.EMBEDDING_AVAILABLE, bool,
                               f"EMBEDDING_AVAILABLE must be bool, got "
                               f"{type(news_tool.EMBEDDING_AVAILABLE).__name__}")
+
+
+class TestArxivRateLimit(unittest.TestCase):
+    """scrape_arxiv() must honor ARXIV_RATE_LIMIT between feed fetches.
+
+    Regression: the env var was documented (default 3.0s, matching
+    arXiv's published rate-limit guideline) but never read, so the
+    scraper could hammer arXiv with back-to-back requests. This test
+    monkey-patches time.sleep and feed fetches, sets a tiny rate
+    limit, and asserts the sleep was honored.
+    """
+
+    def setUp(self):
+        try:
+            import requests  # noqa: F401
+            self._requests_available = True
+        except ImportError:
+            self._requests_available = False
+
+        import news_tool
+        self._news_tool = news_tool
+
+    def test_sleeps_between_arxiv_feeds(self):
+        if not self._requests_available:
+            self.skipTest("requests not available")
+
+        sleep_calls = []
+
+        def fake_sleep(seconds):
+            sleep_calls.append(float(seconds))
+
+        empty_rss = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<rss version="2.0"><channel><title>empty</title>'
+            '<description>empty</description></channel></rss>'
+        )
+
+        def fake_fetch_url(url, timeout=20, retries=3):
+            return empty_rss
+
+        with patch.dict(os.environ, {'ARXIV_RATE_LIMIT': '0.01'}):
+            with patch.object(self._news_tool.time, 'sleep', side_effect=fake_sleep):
+                with patch.object(self._news_tool, 'fetch_url', side_effect=fake_fetch_url):
+                    self._news_tool.scrape_arxiv()
+
+        self.assertGreaterEqual(
+            len(sleep_calls), 1,
+            f"expected at least one time.sleep call between arXiv feeds, got {sleep_calls!r}",
+        )
+        for s in sleep_calls:
+            self.assertGreaterEqual(
+                s, 0.01,
+                f"sleep duration {s!r} is below the ARXIV_RATE_LIMIT=0.01 minimum",
+            )
+
+    def test_default_rate_limit_is_three_seconds(self):
+        if not self._requests_available:
+            self.skipTest("requests not available")
+
+        sleep_calls = []
+
+        def fake_sleep(seconds):
+            sleep_calls.append(float(seconds))
+
+        empty_rss = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<rss version="2.0"><channel><title>empty</title>'
+            '<description>empty</description></channel></rss>'
+        )
+
+        def fake_fetch_url(url, timeout=20, retries=3):
+            return empty_rss
+
+        env_without_limit = {k: v for k, v in os.environ.items() if k != 'ARXIV_RATE_LIMIT'}
+        with patch.dict(os.environ, env_without_limit, clear=True):
+            with patch.object(self._news_tool.time, 'sleep', side_effect=fake_sleep):
+                with patch.object(self._news_tool, 'fetch_url', side_effect=fake_fetch_url):
+                    self._news_tool.scrape_arxiv()
+
+        for s in sleep_calls:
+            self.assertGreaterEqual(
+                s, 3.0,
+                f"default rate limit should be >= 3.0s, got sleep({s})",
+            )
 
 
 if __name__ == '__main__':
