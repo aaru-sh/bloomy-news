@@ -103,7 +103,7 @@ bloomy-news/
 <details>
 <summary><strong>Full feature list</strong></summary>
 
-- **8 scrapers** — arXiv (4 RSS feeds: cs.AI, cs.LG, cs.CL, cs.CV), GitHub trending, NewsAPI, dedicated cybersecurity feeds (SecurityWeek, Krebs, Hacker News, BleepingComputer, AWS/GCP/Azure security blogs), Finnhub finance news, Google News (3 query feeds; redirect URLs are resolved to the real publisher), and Markets.
+- **8 scrapers** — arXiv (13 RSS feeds: cs.AI, cs.LG, cs.CL, cs.CV, cs.NE, cs.RO, cs.IR, cs.MA, cs.HC, stat.ML, eess.SP, q-fin.ST, cs.CR), GitHub trending, NewsAPI, dedicated cybersecurity feeds (SecurityWeek, Krebs, Hacker News, BleepingComputer, AWS/GCP/Azure security blogs), Finnhub finance news, Google News (3 query feeds; redirect URLs are resolved to the real publisher), and Markets.
 - **6-category classifier** — LLM, Neural Nets, ML Research, AI Applications, Finance, Cybersecurity — with arXiv subject as a strong prior, multi-tag output, and an `Uncategorized` fallback when no category crosses the confidence threshold. Two modes: a default keyword matcher (fast, offline, ~0 deps) and an optional embedding classifier using `all-MiniLM-L6-v2` (higher accuracy, requires `sentence-transformers` — see [Classification](#classification) below for the install trade-off).
 - **Two-layer deduplication** — Jaccard title similarity (≥0.80) for general articles + arXiv version tracking (v1/v2/v3 of the same paper collapse to one entry).
 - **SQLite primary store** with WAL mode, FTS5 full-text index, and atomic writes. Filesystem archive of compressed `.md.gz` files per category for historical articles.
@@ -289,7 +289,7 @@ python news_tool.py
 Output looks like:
 
 ```
-[1/8] arXiv (4 feeds)...
+[1/8] arXiv (13 feeds)...
   -> 47 new articles
 [2/8] GitHub...
   -> 3 new articles
@@ -481,7 +481,7 @@ bloomy-news/
 │
 ├── config/                    tracked JSON, ${VAR} placeholders only
 │   ├── categories.json        classification keyword rules
-│   ├── sources.json           API endpoints + 4 arXiv feeds + 3 Google News queries
+│   ├── sources.json           API endpoints + 13 arXiv feeds + 3 Google News queries
 │   └── telegram.json          bot placeholder + 7 channel IDs
 │
 ├── dashboard/                 3-page local UI + HTTP server

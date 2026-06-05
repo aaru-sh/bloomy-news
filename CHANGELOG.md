@@ -10,7 +10,41 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 - Semantic dedup using sentence embeddings (in addition to Jaccard)
 - RSS aggregator mode with OPML import
 - Configurable classifier training from user feedback
-- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1)
+- Tighten keyword lists to bring the keyword-only classifier back above the 0.80 gate (currently 63.3% on the regression set, surfaced by the 1.1.2 gate split)
+- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2)
+
+---
+
+## [1.1.2] - 2026-06-05
+
+**Scrape surface, classifier visibility, and CI gate split.** A follow-up
+patch to v1.1.1. The arXiv feed list now matches what the docs claim,
+the Telegram digest is built from the in-memory categorized dict instead
+of a fresh DB query, article embeddings are persisted to the database,
+and the classifier CI gate is split into keyword / embedding / combined
+sub-gates so a regression in any one path is named in the log.
+
+### Highlights
+- **arXiv: 13 feeds** (`4adfc0c`): the `scrape_arxiv` feed list is replaced with the 13 categories the docs and CHANGELOG already claimed (cs.AI, cs.LG, cs.CL, cs.CV, cs.NE, cs.RO, cs.IR, cs.MA, cs.HC, stat.ML, eess.SP, q-fin.ST, cs.CR). The README, `docs/SCRAPERS.md`, and `config/sources.json` now agree.
+- **Telegram digest uses the categorized dict** (`97cb37f`): `post_to_telegram` is refactored into `_select_top_articles`, `_format_digest`, and `_send_telegram_message`. The digest is built from the in-memory `categorized` arg, not a re-query of today's articles from the DB. Falls back to the DB only when `categorized` is empty, with a `logger.warning`.
+- **Article embeddings persisted** (`e24472b`): `store_article` now accepts `embedding: list[float] | None = None` and writes it to the existing `embedding` BLOB column. `load_article_embedding()` reads it back. The `classify_*` helpers return a 5-tuple `(category, confidence, tags, subcategory, embedding)` so the embedding survives the classify→store round trip without recomputation. Schema is unchanged.
+- **Jaccard passes consistent string types** (`9ab4deb`): `title_similarity` gains a `pre_processed: bool = False` flag. `is_duplicate` passes `True` for stored `title_words` (the canonical pre-tokenized join), `False` for the raw `title` fallback. Eliminates the silent tokenization drift that produced different Jaccard scores for the same pair.
+- **`migrate_from_files` logs exceptions** (`870b283`): the bare `except:` is replaced with `except Exception as e: logger.warning(...)`. `import logging` + module-level `logger` added. Tests cover `IOError` and `UnicodeDecodeError`.
+- **`ARXIV_RATE_LIMIT` honored** (`61a496b`): `scrape_arxiv` reads `os.environ.get("ARXIV_RATE_LIMIT", "3.0")` and sleeps between feed fetches. Default of 3.0s matches arXiv's published guideline.
+- **Classifier visibility** (`f227f0b`): `news_tool.EMBEDDING_AVAILABLE` is a module-level bool. `main()` prints `Classifier: embedding` or `Classifier: keyword (install sentence-transformers for better accuracy)` at pipeline start. `requirements.txt` gets a comment block; the README gets a one-line callout near the install instructions.
+- **CI gate split** (`0b2b359`): `evaluate_classifier.py` now reports `keyword=...  embedding=...  combined=...` and exits 0 only if all three sub-gates pass: `KEYWORD_MINIMUM_ACCURACY=0.80`, `EMBEDDING_MINIMUM_ACCURACY=0.95`, `COMBINED_MINIMUM_ACCURACY=0.90` (the legacy `MINIMUM_ACCURACY` constant is kept as an alias). A new `TestRealWorldDistribution` smoke test runs `evaluate_classifier_accuracy` over the live `news.db` if it has more than 50 non-`Uncategorized` articles; skipped otherwise.
+- **README "4 feeds" -> "13 feeds"**: three places in the README (feature list, install progress, repo tree) corrected to match the actual code and `docs/SCRAPERS.md`.
+
+### Known behavior change
+- The keyword-only classifier is currently at **63.3%** on the regression set, below the 0.80 keyword sub-gate. On a machine that does not install `sentence-transformers`, the gate now **fails correctly** (exit 1) where v1.1.1 would have shown 100% combined. The follow-up — tighten keyword lists — is tracked in `[Unreleased]`. Install `sentence-transformers` to get the full 100% combined path.
+
+### Test surface
+- `tests/test_fixes.py`: `TestTelegramCategorizedSource` (2 tests, categorized-dict source + DB-fallback path), `TestArxivRateLimit` (2 tests, env var read + default), `TestMigrateFromFilesLogs` (2 tests, IOError + UnicodeDecodeError), `TestJaccardPreprocessedVsRaw` (1 test), `TestEmbeddingStoredOnStoreArticle` (4 tests, store/load round-trip + None handling), `TestClassifierVisibility` (1 test, `EMBEDDING_AVAILABLE` module-level bool).
+- `tests/test_classifier.py`: `TestGateThresholds` (5 tests, per-gate threshold constants), `TestRealWorldDistribution` (1 test, skipped without populated `news.db`), `test_classifier_return_shape` updated to assert 5-tuple length.
+
+### Not changed in this release
+- Bookmark persistence to the `articles` table remains deferred (now deferred three times). The `TestFreshInstallFlow` sys.modules pollution still blocks the cleanest implementation; needs the test rewritten to use a subprocess.
+- Real-world classifier accuracy test (review item 11) is partially addressed by `TestRealWorldDistribution`; a true accuracy test requires labeled data — manual labeling or LLM-as-judge pipeline is out of scope for a patch release.
 
 ---
 

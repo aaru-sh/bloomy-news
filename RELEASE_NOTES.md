@@ -1,7 +1,57 @@
 # Release notes — paste into the GitHub Release UI
 
 Copy everything below the line into the "Describe this release" box on
-https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.1.1
+https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.1.2
+
+---
+
+## Bloomy News v1.1.2 — Scrape surface, classifier visibility, and CI gate split
+
+A follow-up patch to v1.1.1. The arXiv feed list now matches what the
+docs claim, the Telegram digest is built from the in-memory categorized
+dict instead of a fresh DB query, article embeddings are persisted to
+the database, and the classifier CI gate is split into keyword /
+embedding / combined sub-gates so a regression in any one path is named
+in the log.
+
+### What changed
+
+- **arXiv: 13 feeds** (the list the docs already promised, not the 4
+  that were actually wired up)
+- **Telegram digest uses the in-memory categorized dict** — no more
+  surprising yourself with stale DB rows in a fresh run
+- **Article embeddings persisted** to the existing `embedding` BLOB
+  column (schema unchanged); the classify → store round trip preserves
+  the 384-dim vector
+- **Jaccard comparison** passes consistent string types (stored
+  `title_words` for the fast path, raw `title` for the fallback), so the
+  same article pair always scores the same
+- **`migrate_from_files`** logs exceptions instead of swallowing them
+- **`ARXIV_RATE_LIMIT` honored** — defaults to 3.0s, matching arXiv's
+  published guideline
+- **Classifier visibility** — `main()` prints which mode is running;
+  README and `requirements.txt` get a one-line callout about the
+  optional `sentence-transformers` install
+- **CI gate split** — `evaluate_classifier.py` reports
+  `keyword=... embedding=... combined=...` and exits 0 only if all
+  three sub-gates pass. The keyword-only regression drops to 63.3% on
+  the test set, so on a machine without `sentence-transformers` the
+  gate now fails loudly instead of hiding the gap behind a 100%
+  combined number
+
+### Heads-up
+
+The keyword-only path is currently 63.3% on the regression set. With
+`pip install -r requirements.txt` and no extras, the gate will now
+**exit 1** where v1.1.1 would have shown 100% combined. Install
+`sentence-transformers` to get the full path back, or wait for the
+keyword-list tightening in the next release.
+
+### Upgrading
+
+No schema changes. No config changes. `git pull` and re-run
+`scheduler.py --install --verify` if you want the install-time self-check
+(from v1.1.1).
 
 ---
 
