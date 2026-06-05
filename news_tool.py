@@ -3,6 +3,7 @@
 Bloomy News Excavator - Pure Python News Scraper & Distributor.
 """
 import json
+import os
 import re
 import urllib.request
 import time
@@ -245,6 +246,8 @@ def parse_rss(xml_text, source_key):
     return articles
 
 def scrape_arxiv():
+    # arXiv asks for >= 3 seconds between requests; configurable via ARXIV_RATE_LIMIT env var.
+    rate_limit = float(os.environ.get('ARXIV_RATE_LIMIT', '3.0'))
     print("  [1/8] arXiv ML/AI papers...")
     feeds = [
         ("https://rss.arxiv.org/rss/cs.AI", "cs.AI"),
@@ -253,7 +256,9 @@ def scrape_arxiv():
         ("https://rss.arxiv.org/rss/cs.CV", "cs.CV"),
     ]
     articles = []
-    for url, cat in feeds:
+    for i, (url, cat) in enumerate(feeds):
+        if i > 0:
+            time.sleep(rate_limit)
         content = fetch_url(url)
         if content:
             arts = parse_rss(content, "arxiv")
@@ -774,7 +779,9 @@ def main():
     
     print("\nPHASE 1: SCRAPING")
     print("-" * 40)
-    
+    rate_limit = float(os.environ.get('ARXIV_RATE_LIMIT', '3.0'))
+    print(f"  arXiv rate limit: {rate_limit}s per feed")
+
     all_articles = []
     scrapers = [
         ("arXiv", scrape_arxiv),
