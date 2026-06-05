@@ -10,7 +10,48 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 - Semantic dedup using sentence embeddings (in addition to Jaccard)
 - RSS aggregator mode with OPML import
 - Configurable classifier training from user feedback
-- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0)
+- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1)
+
+---
+
+## [1.1.1] - 2026-06-05
+
+**Bug fixes, classifier hardening, and dashboard modernization.** A follow-up
+patch to v1.1.0. No new features; no breaking changes. The classifier is
+less prone to substring false positives, the dashboard JavaScript is
+fully ES6+, the database search and dedup paths use SQL pre-filtering
+where they previously looped in Python, and several over-claims in the
+docs were corrected.
+
+### Highlights
+- **Atomic bookmark writes** (`e2f272b`): `toggle_bookmark` in `database.py` now uses `tempfile.mkstemp` + `os.replace` and is guarded by `_BOOKMARKS_LOCK`. The dashboard server already had this since v1.1.0; the lower-level helper is now also crash-safe under concurrent requests.
+- **FTS5 article search** (`e2f272b`): `get_articles(query=...)` now routes through the `articles_fts` MATCH expression. Behavior is unchanged for callers that don't pass a query; non-search calls still use the indexed columns. Falls back to `LIKE` only if the FTS5 query parses to nothing or the FTS5 table is unavailable.
+- **SQL Jaccard pre-filter** (`e2f272b`): `is_duplicate` narrows candidates in SQL by shared significant words (length >= 4) before the Python Jaccard loop runs. Cuts the loop from O(200) to O(small) per call on a typical 5000-article database.
+- **Word-boundary keyword classifier** (`44580bc`): `_classify_keywords` now tokenizes with `\b[\w'-]+\b` and matches by token-set membership. Sub-3-char keywords and pure stopwords are dropped. Multi-word keywords require all words to appear. Fixes the `social security -> Cybersecurity` and `runway model -> ML-Research` false positives.
+- **Classifier accuracy metrics** (`44580bc`): new `evaluate_classifier_accuracy()` in `news_tool.py` returns `{correct, total, accuracy, by_category}` and prints a one-line CLI summary. `scripts/evaluate_classifier.py` wraps it and exits 0 only if accuracy >= `MINIMUM_ACCURACY` (0.90), suitable for CI gating.
+- **Dashboard ES6+** (`c6cc52a`): `dashboard/app.js`, `app-filters.js`, and `app-bookmarks.js` are fully modernized — `const`/`let`, arrow callbacks, template literals, rest params. No bundler, no build step. The dashboard remains a static site served by `dashboard/serve.py`.
+- **Docs audience split** (`0726c05`): the "Concepts for newcomers" block (RSS / SQL / API key explanations) is moved out of `README.md` and consolidated into `docs/NEWCOMERS.md`. The main README now assumes the reader knows what RSS, SQL, and JSON are, and links to the newcomers file in one line.
+- **SECURITY.md atomicity claim** (`0726c05`): the over-claim is replaced with an accurate description that names both `dashboard/serve.py` and `database.py` as crash-safe under concurrent requests on the localhost deployment.
+- **Scheduler `--verify`** (`eeacd73`): read-only diagnostic that confirms the registered Python path exists and is launchable, the repo path resolves, the database file is writable, the `.env` is present, and the autostart is registered. Prints one pass/fail line per check with a remediation hint. Exits non-zero on any failure. `--install` now runs `--verify` immediately after registering the task, so silent failures (moved venv, broken path encoding) are caught at install time, not at first scheduled run.
+
+### Test surface
+- `tests/test_fixes.py`: `test_bookmark_race` (concurrent toggles, no lost updates), `test_fts5_search` (FTS5 routing), `test_jaccard_prefilter` (SQL pre-filter coverage). Skipped via inline guards when the FTS5 table or `_BOOKMARKS_LOCK` symbol is missing.
+- `tests/test_classifier.py`: `test_keyword_word_boundary` (no false positives on "social security" or "runway model" in disambiguating context), `test_evaluate_classifier_accuracy` (smoke test the evaluate API shape).
+- `node --check` passes on all three dashboard JS files.
+
+### Verification
+- `python -m unittest discover -s tests -v` — OK, 1 CI-only skip.
+- `python scripts/evaluate_classifier.py` — `Accuracy: 100.0% (30/30)  keyword=63.3%  embedding=100%` PASS.
+- `python scripts/scheduler.py --verify` — all 6 checks pass on the dev box.
+- Date-filter regression test (clicking 5 June on the calendar) still returns 88 articles, confirming the v1.1.0 hotfix is intact.
+
+### Not in 1.1.1 (deferred)
+- **Bookmark persistence to the articles table** — still deferred. The `TestFreshInstallFlow` test pollution issue from v1.1.0 was not addressed in this release; the auto-generated `dashboard_data.json` is still the only bookmark storage.
+- **GitHub trending scraper** still uses regex against rendered HTML (out of scope per the "don't touch scrapers" constraint; a follow-up to use the GitHub REST API is planned).
+- **RSS parser** still uses regex (out of scope per the "no new external dependencies" constraint; `feedparser` is not added).
+
+### Migration
+None. v1.1.0 -> v1.1.1 is a drop-in replacement. The classifier and bookmark changes are backward-compatible; the FTS5 search falls back to `LIKE` if FTS5 is unavailable, and the keyword classifier no longer returns categories that the substring matcher would have spuriously matched.
 
 ---
 
