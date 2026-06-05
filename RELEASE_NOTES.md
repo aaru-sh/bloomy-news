@@ -1,7 +1,83 @@
 # Release notes — paste into the GitHub Release UI
 
 Copy everything below the line into the "Describe this release" box on
-https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.1.0
+https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.1.1
+
+---
+
+## Bloomy News v1.1.1 — Bug fixes, classifier hardening, dashboard modernization
+
+This is a follow-up patch to v1.1.0. No new features; no breaking
+changes. The classifier is less prone to substring false positives, the
+dashboard JavaScript is fully ES6+, the database search and dedup paths
+use SQL pre-filtering where they previously looped in Python, and a
+few over-claims in the docs were corrected.
+
+### What's inside
+
+- **Atomic bookmark writes** — `toggle_bookmark` in `database.py` now uses
+  `tempfile.mkstemp` + `os.replace` and is guarded by `_BOOKMARKS_LOCK`.
+  The dashboard server already had this since v1.1.0; the lower-level
+  helper is now also crash-safe under concurrent requests.
+- **FTS5 article search** — `get_articles(query=...)` now routes through
+  the `articles_fts` MATCH expression. Behavior is unchanged for callers
+  that don't pass a query. Falls back to `LIKE` only if FTS5 is
+  unavailable or the query parses to nothing.
+- **SQL Jaccard pre-filter** — `is_duplicate` narrows candidates in SQL
+  by shared significant words (length >= 4) before the Python Jaccard
+  loop runs. Cuts the loop from O(200) to O(small) per call on a typical
+  5000-article database.
+- **Word-boundary keyword classifier** — `_classify_keywords` now
+  tokenizes with `\b[\w'-]+\b` and matches by token-set membership. Sub-3-char
+  keywords and pure stopwords are dropped. Multi-word keywords require
+  all words to appear. Fixes the `social security -> Cybersecurity` and
+  `runway model -> ML-Research` false positives that plain substring
+  matching produced.
+- **Classifier accuracy metrics** — new `evaluate_classifier_accuracy()`
+  in `news_tool.py` returns `{correct, total, accuracy, by_category}` and
+  prints a one-line CLI summary. `scripts/evaluate_classifier.py` wraps
+  it and exits 0 only if accuracy >= `MINIMUM_ACCURACY` (0.90).
+  On the current labeled set: **100.0% (30/30)** overall;
+  `keyword=63.3%` `embedding=100%`.
+- **Dashboard ES6+** — `dashboard/app.js`, `app-filters.js`, and
+  `app-bookmarks.js` are fully modernized: `const`/`let`, arrow
+  callbacks, template literals, rest params. No bundler, no build step.
+  The dashboard remains a static site served by `dashboard/serve.py`.
+- **Docs audience split** — the "Concepts for newcomers" block
+  (RSS / SQL / API key explanations) is moved out of `README.md` and
+  consolidated into `docs/NEWCOMERS.md`. The main README now assumes
+  the reader knows what RSS, SQL, and JSON are.
+- **SECURITY.md atomicity claim** — the over-claim is replaced with an
+  accurate description that names both `dashboard/serve.py` and
+  `database.py` as crash-safe under concurrent requests.
+- **Scheduler `--verify`** — read-only diagnostic that confirms the
+  registered Python path exists and is launchable, the repo path
+  resolves, the database file is writable, the `.env` is present, and
+  the autostart is registered. Prints one pass/fail line per check
+  with a remediation hint. `--install` now runs `--verify` immediately
+  after registering the task, so silent failures (moved venv, broken
+  path encoding) are caught at install time.
+
+### What's still known / deferred
+
+- **Bookmark persistence to the articles table** — still deferred from
+  v1.1.0. The `TestFreshInstallFlow` test pollution issue was not
+  addressed in this release; `dashboard_data.json` remains the only
+  bookmark storage. The atomic + locked writes in v1.1.1 keep the
+  existing storage safe.
+- **GitHub trending scraper** still uses regex against rendered HTML
+  (out of scope this release; a follow-up to use the GitHub REST API
+  is planned).
+- **RSS parser** still uses regex (out of scope per the "no new
+  external dependencies" rule; `feedparser` is not added).
+
+### Migration
+
+None. v1.1.0 -> v1.1.1 is a drop-in replacement. The classifier and
+bookmark changes are backward-compatible; the FTS5 search falls back to
+`LIKE` if FTS5 is unavailable, and the keyword classifier no longer
+returns categories that the substring matcher would have spuriously
+matched.
 
 ---
 
