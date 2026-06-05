@@ -19,6 +19,10 @@ from config import get_telegram_token, get_newsapi_key, get_finnhub_key
 
 BASE = Path(__file__).parent.resolve()
 
+KEYWORD_MINIMUM_ACCURACY = 0.80
+EMBEDDING_MINIMUM_ACCURACY = 0.95
+COMBINED_MINIMUM_ACCURACY = 0.90
+
 LOG_DIR = BASE / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
