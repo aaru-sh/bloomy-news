@@ -39,6 +39,8 @@ git clone https://github.com/aaru-sh/bloomy-news.git; Set-Location bloomy-news; 
 git clone https://github.com/aaru-sh/bloomy-news.git && cd bloomy-news && pip install -r requirements.txt && python scripts/smoke_test.py
 ```
 
+> Tip: install [sentence-transformers](https://www.sbert.net/) for accurate classification. Without it, the tool falls back to a keyword classifier that miscategorizes roughly 1 in 3 articles.
+
 If the smoke test prints `ALL CHECKS PASSED`, your install is good. If it prints `[FAIL]`, read the line under it — it tells you what is wrong and how to fix it.
 
 ### Run

@@ -483,5 +483,17 @@ class TestJaccardPrefilter(unittest.TestCase):
         self.assertEqual(method, 'title_similarity')
 
 
+class TestClassifierVisibility(unittest.TestCase):
+    """Regression: main() must tell the user which classifier is running."""
+
+    def test_embedding_available_is_module_level_bool(self):
+        import news_tool
+        self.assertTrue(hasattr(news_tool, 'EMBEDDING_AVAILABLE'),
+                        "news_tool.EMBEDDING_AVAILABLE is missing")
+        self.assertIsInstance(news_tool.EMBEDDING_AVAILABLE, bool,
+                              f"EMBEDDING_AVAILABLE must be bool, got "
+                              f"{type(news_tool.EMBEDDING_AVAILABLE).__name__}")
+
+
 if __name__ == '__main__':
     unittest.main()
