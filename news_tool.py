@@ -629,7 +629,7 @@ def _classify_embedding(article):
     summary = article.get('summary', '') or ''
     text = f"{title}. {summary}".strip()
     if not text or text == '.':
-        return 'Uncategorized', 0.0, [], 'news'
+        return 'Uncategorized', 0.0, [], 'news', None
 
     model, cat_embs = _get_embedding_model()
     if model is None:
@@ -638,7 +638,7 @@ def _classify_embedding(article):
     text_emb = model.encode(text, convert_to_numpy=True)
     text_norm = np.linalg.norm(text_emb)
     if text_norm == 0:
-        return 'Uncategorized', 0.0, [], 'news'
+        return 'Uncategorized', 0.0, [], 'news', None
 
     scores = {}
     for cat, cat_emb in cat_embs.items():
@@ -652,9 +652,9 @@ def _classify_embedding(article):
     best_score = scores[best_cat]
 
     if best_score < 0.15:
-        return 'Uncategorized', 0.0, [], 'news'
+        return 'Uncategorized', 0.0, [], 'news', None
 
-    return best_cat, round(best_score, 4), [best_cat], 'news'
+    return best_cat, round(best_score, 4), [best_cat], 'news', text_emb
 
 
 def _classify_keywords(article):
@@ -680,7 +680,7 @@ def _classify_keywords(article):
     max_score = max(scores.values(), default=0)
 
     if max_score == 0:
-        return "Uncategorized", 0.0, [], "news"
+        return "Uncategorized", 0.0, [], "news", None
 
     primary = max(scores, key=scores.get)
     confidence = min(max_score / 5.0, 1.0)
@@ -702,7 +702,7 @@ def _classify_keywords(article):
         if best_score > 0:
             subcategory = best_subcat
 
-    return primary, confidence, tags, subcategory
+    return primary, confidence, tags, subcategory, None
 
 
 def classify_article(article):
@@ -893,13 +893,13 @@ def main():
     conn = database.get_connection()
     try:
         for article in all_articles:
-            category, confidence, tags, subcategory = classify_article(article)
+            category, confidence, tags, subcategory, embedding = classify_article(article)
             article['category'] = category
             article['confidence'] = confidence
             article['tags'] = tags
             article['subcategory'] = subcategory
 
-            is_new, article_id = database.store_article(article, conn=conn)
+            is_new, article_id = database.store_article(article, conn=conn, embedding=embedding)
             if is_new:
                 new_count += 1
                 categorized[category].append(article)
@@ -981,12 +981,12 @@ def evaluate_classifier_accuracy(limit: int = 200) -> dict:
     for title, summary, expected in samples:
         article = {"title": title, "summary": summary}
 
-        kw_cat, _, _, _ = _classify_keywords(article)
+        kw_cat, _, _, _, _ = _classify_keywords(article)
         kw_match = (kw_cat == expected)
         if kw_match:
             keyword_correct += 1
 
-        emb_cat, _, _, _ = _classify_embedding(article)
+        emb_cat, _, _, _, _ = _classify_embedding(article)
         emb_match = (emb_cat == expected)
         if emb_match:
             embedding_correct += 1

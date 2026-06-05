@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 BASE = Path(__file__).parent.resolve()
 DB_PATH = BASE / "news.db"
 
+EMBEDDING_DIM = 384
+EMBEDDING_DTYPE = "float32"
+
 def get_connection():
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
@@ -228,7 +231,24 @@ def log_duplicate(content_hash, title, similar_id, score, method, conn=None):
         if own_conn:
             conn.close()
 
-def store_article(article, conn=None):
+def _serialize_embedding(embedding):
+    """Convert a numpy array (or raw bytes/None) to a BLOB-storable value.
+
+    Accepts a numpy ndarray (calls tobytes()), a bytes/bytearray (returned
+    as-is), or None (returned as None so the column stores NULL).
+    """
+    if embedding is None:
+        return None
+    if isinstance(embedding, (bytes, bytearray)):
+        return bytes(embedding)
+    if hasattr(embedding, "tobytes"):
+        return embedding.tobytes()
+    raise TypeError(
+        f"embedding must be a numpy array, bytes, or None; got {type(embedding).__name__}"
+    )
+
+
+def store_article(article, conn=None, embedding=None):
     """Insert an article if it's not a duplicate.
 
     If `conn` is provided, uses it (caller manages commit/rollback). The
@@ -237,6 +257,12 @@ def store_article(article, conn=None):
 
     If `conn` is None, opens a fresh connection, commits the insert (or
     rollback on error), and closes before returning.
+
+    The optional `embedding` argument is the article's vector
+    representation (numpy array, bytes, or None). When provided it is
+    serialized to a BLOB and stored in the `articles.embedding` column;
+    when None the column is left NULL. Default is None, which preserves
+    the historical behavior for callers that don't compute embeddings.
     """
     own_conn = conn is None
     if own_conn:
@@ -252,11 +278,12 @@ def store_article(article, conn=None):
         arxiv_id = parse_arxiv_id(url) or ''
         title_words = extract_title_words(title)
         categories = json.dumps(article.get('tags', []))
+        embedding_blob = _serialize_embedding(embedding)
         cursor = conn.execute("""
             INSERT INTO articles (title, url, summary, source, category, subcategory,
                                   published, author, content_hash, arxiv_id,
-                                  title_words, categories, confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  title_words, categories, confidence, embedding)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             title, url, summary,
             article.get('source', ''),
@@ -268,7 +295,8 @@ def store_article(article, conn=None):
             arxiv_id,
             title_words,
             categories,
-            article.get('confidence', 0.0)
+            article.get('confidence', 0.0),
+            embedding_blob,
         ))
         if own_conn:
             conn.commit()
@@ -278,6 +306,38 @@ def store_article(article, conn=None):
         if own_conn:
             conn.rollback()
         return False, None
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def load_article_embedding(article_id, conn=None):
+    """Reconstruct the numpy embedding vector stored for `article_id`.
+
+    Returns the float32 array of shape (EMBEDDING_DIM,) on success, or
+    None when the article has no embedding stored (NULL column) or no
+    row matches the id. Asserts the stored byte length matches
+    EMBEDDING_DIM * 4 (the float32 byte size) so a corrupt or
+    truncated blob fails loudly rather than silently reshaping.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT embedding FROM articles WHERE id = ?", (article_id,)
+        ).fetchone()
+        if row is None or row["embedding"] is None:
+            return None
+        import numpy as np
+        blob = bytes(row["embedding"])
+        expected = EMBEDDING_DIM * 4
+        if len(blob) != expected:
+            raise ValueError(
+                f"embedding blob for article {article_id} is {len(blob)} bytes; "
+                f"expected {expected} for {EMBEDDING_DIM}-dim {EMBEDDING_DTYPE}"
+            )
+        return np.frombuffer(blob, dtype=EMBEDDING_DTYPE)
     finally:
         if own_conn:
             conn.close()
