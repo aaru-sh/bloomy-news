@@ -1,7 +1,62 @@
 # Release notes — paste into the GitHub Release UI
 
 Copy everything below the line into the "Describe this release" box on
-https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.1.2
+https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.2.0
+
+---
+
+## Bloomy News v1.2.0 — Scraper test coverage, feedparser, coverage in CI, and a Dockerfile
+
+A feature release that hardens the repo against the two most likely
+sources of silent breakage (feed shape changes and RSS parser bugs)
+and packages the dashboard for non-Windows deployment.
+
+### What changed
+
+- **39 new scraper tests** covering all 8 scrapers (`scrape_arxiv`,
+  `scrape_github`, `scrape_newsapi`, `scrape_cybersec`, `scrape_finance`,
+  `scrape_tech`, `scrape_google_news`, `scrape_markets`) and
+  `parse_rss()`. Mocks `fetch_url`/`fetch_json` so no real HTTP. The
+  test suite is now **103 tests** (was 61) and any day a feed's HTML
+  shape changes, you'll know immediately.
+- **feedparser swap** — `parse_rss()` now uses `feedparser.parse()` as
+  the primary path. Handles RSS 2.0, RSS 1.0, Atom, all date formats,
+  CDATA, HTML entities, `dc:creator`, and inline HTML in summaries.
+  The legacy regex parser is preserved as `_parse_rss_regex()` and
+  called via `logger.warning` if feedparser raises — we never want a
+  single malformed feed to drop the whole scrape. Fixes the
+  documented `<dc:creator>` limitation; real arXiv author names now
+  flow through.
+- **Coverage.py in CI** — `requirements-dev.txt` pins `coverage>=7.0`,
+  the test workflow now runs `coverage run -m unittest discover -s
+  tests` then `coverage report --fail-under=50`. Current measured
+  coverage: **67%**. Threshold is intentionally conservative; raise
+  it as coverage grows.
+- **Dockerfile** — `python:3.11-slim` base, non-root user (uid 1000),
+  `HEALTHCHECK` on `http://127.0.0.1:8080/`, default `CMD` runs
+  `dashboard/serve.py`. Build with `docker build -t bloomy-news .`,
+  run with `docker run --rm -p 127.0.0.1:8080:8080 bloomy-news`. The
+  service binds localhost only (per repo convention); the `-p` flag
+  must map `127.0.0.1:8080:8080` to keep it off the LAN.
+
+### What was deferred
+
+- **Type hints** on the public surface of `news_tool.py` and
+  `database.py` — reviewer's concern is real but not blocking for
+  solo work.
+- **`news_tool.py` split** into a `scrapers/` package + slim
+  orchestrator — do at the 9th source, not before.
+- **NewsAPI/Finnhub rate-limit tracking** — defer until actually
+  throttled.
+- **Bookmark persistence to the articles table** — still blocked
+  by `TestFreshInstallFlow` sys.modules pollution; needs the test
+  rewritten to use a subprocess.
+
+### Upgrading
+
+No schema changes. No config changes. `git pull`, then either
+`pip install -r requirements.txt` to pick up `feedparser`, or just
+rebuild the Docker image.
 
 ---
 
