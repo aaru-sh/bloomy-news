@@ -87,6 +87,18 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_GET()
 
+    def end_headers(self):
+        """Force no-cache on dashboard data files so today's articles
+        appear immediately after a pipeline run. SimpleHTTPRequestHandler
+        doesn't set Cache-Control, so the browser caches the stale JSON
+        and the date filter (e.g. "click 5 June") returns 0 results even
+        when today's articles exist in the file."""
+        no_cache_paths = ('/data/dashboard_data.json', '/data/bookmarks.json')
+        if hasattr(self, 'path') and self.path.split('?')[0].rstrip('/') in no_cache_paths:
+            self.send_header('Cache-Control', 'no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+        super().end_headers()
+
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip('/')
