@@ -50,9 +50,13 @@ jobs:
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: |
           coverage run -m unittest discover -s tests -v
-          # Threshold is intentionally conservative. Current: ~57%.
-          # After v1.2.0 scraper tests merge: ~75%. Raise as coverage grows.
-          coverage report --fail-under=50
+          # Threshold is intentionally conservative. Current: ~62%
+          # post-v1.2.0 (was 57% pre-tests, was 75% earlier in the branch).
+          # Raise as coverage grows.
+          # --ignore-errors: the fresh-install test copies source to a
+          # tempdir; coverage reports a fatal "no source" error on those
+          # copies. We know they exist; we just don't want to track them.
+          coverage report --fail-under=50 --ignore-errors
 
       - name: Run fresh-install smoke test
         run: python scripts/smoke_test.py
