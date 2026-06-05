@@ -148,10 +148,10 @@ class TestArxivParseRss(unittest.TestCase):
         self.assertEqual(articles, [],
                          "item with empty title and empty url must be dropped")
 
-    def test_dc_creator_not_captured_known_limitation(self):
-        """Real arXiv uses <dc:creator>; current parser only reads
-        <author>. This is a documented limitation, not a bug to fix
-        in v1.2.0 (the feedparser swap is the right place to fix it)."""
+    def test_dc_creator_captured(self):
+        """Real arXiv uses <dc:creator>. feedparser maps this to
+        entry.author; the v1.2.0 swap fixes what was a regex-parser
+        limitation."""
         xml = ARXIV_RSS_TEMPLATE.format(
             title="cs.AI",
             category="cs.AI",
@@ -165,9 +165,8 @@ class TestArxivParseRss(unittest.TestCase):
         )
         articles = self.news_tool.parse_rss(xml, "arxiv")
         self.assertEqual(len(articles), 1)
-        self.assertEqual(articles[0]["author"], "",
-                         "dc:creator is NOT picked up by current parser; "
-                         "the feedparser swap should fix this")
+        self.assertEqual(articles[0]["author"], "Real Author",
+                         "feedparser must capture <dc:creator> as author")
 
 
 class TestScrapeArxivFeedList(unittest.TestCase):
@@ -271,6 +270,96 @@ class TestScrapeArxivRateLimitRegression(unittest.TestCase):
         self.assertEqual(sleep_calls, [0.0] * 12,
                          f"expected 12 zero-duration sleeps (13 feeds - 1), "
                          f"got {sleep_calls!r}")
+
+
+class TestParseRssFallbackToRegex(unittest.TestCase):
+    """When feedparser raises (e.g. on pathological input that crashes
+    the C extension), parse_rss() must fall back to the legacy regex
+    parser instead of dropping the whole feed. This locks in the
+    v1.2.0 feedparser swap's safety net."""
+
+    def setUp(self):
+        import news_tool
+        self.news_tool = news_tool
+
+    def test_falls_back_when_feedparser_raises(self):
+        valid_xml = ARXIV_RSS_TEMPLATE.format(
+            title="cs.AI",
+            category="cs.AI",
+            items=_arxiv_item("2606.44444", "Fallback test", "summary"),
+        )
+        import feedparser
+        call_count = [0]
+        original_parse = feedparser.parse
+
+        def boom(*a, **kw):
+            call_count[0] += 1
+            raise RuntimeError("simulated feedparser crash")
+
+        feedparser.parse = boom
+        try:
+            articles = self.news_tool.parse_rss(valid_xml, "arxiv")
+        finally:
+            feedparser.parse = original_parse
+
+        self.assertEqual(len(articles), 1,
+                         "regex fallback must produce the same article")
+        self.assertEqual(articles[0]["title"], "Fallback test")
+        self.assertEqual(articles[0]["url"], "https://arxiv.org/abs/2606.44444")
+        self.assertEqual(call_count[0], 1, "feedparser must be tried once before fallback")
+
+
+class TestParseRssFeedparserPrimary(unittest.TestCase):
+    """Lock in the v1.2.0 feedparser swap: parse_rss() now uses
+    feedparser as the primary path (not the regex fallback)."""
+
+    def setUp(self):
+        import news_tool
+        self.news_tool = news_tool
+
+    def test_feedparser_called_for_normal_rss(self):
+        """For a well-formed RSS document, feedparser.parse must be
+        called (not the regex fallback)."""
+        import feedparser
+        valid_xml = ARXIV_RSS_TEMPLATE.format(
+            title="cs.AI",
+            category="cs.AI",
+            items=_arxiv_item("2606.55555", "Primary path", "summary"),
+        )
+        call_count = [0]
+        original_parse = feedparser.parse
+
+        def counting_parse(*a, **kw):
+            call_count[0] += 1
+            return original_parse(*a, **kw)
+
+        feedparser.parse = counting_parse
+        try:
+            self.news_tool.parse_rss(valid_xml, "arxiv")
+        finally:
+            feedparser.parse = original_parse
+        self.assertEqual(call_count[0], 1,
+                         "feedparser.parse must be called exactly once for valid RSS")
+
+    def test_atom_entry_uses_feedparser(self):
+        """Atom <feed><entry> documents must be parsed by feedparser
+        (not the regex fallback) so the result uses the same shape."""
+        atom = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>Atom Feed</title>
+<entry>
+<title>Atom article</title>
+<link href="https://example.com/atom-1"/>
+<summary>Atom summary</summary>
+<updated>2026-06-05T12:00:00Z</updated>
+<author><name>A. Author</name></author>
+</entry>
+</feed>"""
+        articles = self.news_tool.parse_rss(atom, "atom-source")
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(articles[0]["title"], "Atom article")
+        self.assertEqual(articles[0]["url"], "https://example.com/atom-1")
+        self.assertEqual(articles[0]["author"], "A. Author")
 
 
 if __name__ == "__main__":

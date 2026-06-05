@@ -191,7 +191,10 @@ def fetch_json(url, timeout=20):
             return None
     return None
 
-def parse_rss(xml_text, source_key):
+def _parse_rss_regex(xml_text, source_key):
+    """Regex-based RSS/Atom parser (legacy fallback). Used only when
+    feedparser raises an unexpected exception. Kept for parity with
+    the v1.1.x behavior locked in by tests/test_scraper_*.py."""
     articles = []
     source_name = SOURCE_NAMES.get(source_key, source_key)
 
@@ -248,6 +251,70 @@ def parse_rss(xml_text, source_key):
             })
 
     return articles
+
+
+def parse_rss(xml_text, source_key):
+    """Parse an RSS or Atom feed into the canonical article dict shape.
+
+    Primary path uses feedparser (handles RSS 2.0, RSS 1.0, Atom, all
+    the date formats, CDATA, HTML entities, dc:creator, and inline HTML
+    in summaries). The legacy regex parser is kept as a fallback for
+    pathological inputs that crash feedparser — we never want a single
+    malformed feed to drop the whole scrape.
+
+    Returns up to 20 articles per feed, each shaped as:
+      {title, url, summary, source, source_key, published, author}
+    """
+    try:
+        import feedparser
+        feed = feedparser.parse(xml_text)
+        articles = []
+        source_name = SOURCE_NAMES.get(source_key, source_key)
+        for entry in feed.entries[:20]:
+            title = (getattr(entry, "title", "") or "").strip()
+            url = (getattr(entry, "link", "") or "").strip()
+            if not title or not url:
+                continue
+            # Summary: feedparser normalizes description -> summary.
+            # Atom entries use .summary; some RSS feeds only have .description.
+            summary = (getattr(entry, "summary", "")
+                       or getattr(entry, "description", "")
+                       or "")
+            # Strip any HTML left in the summary. feedparser does not
+            # always do this; some feeds include full <p> markup.
+            if summary and "<" in summary:
+                summary = re.sub(r"<[^>]+>", "", summary).strip()
+            # Author: feedparser maps dc:creator to .author; some feeds
+            # put a list in .authors with dict payloads.
+            author = (getattr(entry, "author", "") or "").strip()
+            if not author and getattr(entry, "authors", None):
+                first = entry.authors[0]
+                if isinstance(first, dict):
+                    author = first.get("name", "")
+                else:
+                    author = str(first)
+            # Published: feedparser leaves the raw string in .published
+            # and parses to a 9-tuple in .published_parsed. We keep the
+            # raw string for backward compat with downstream code.
+            published = (getattr(entry, "published", "")
+                         or getattr(entry, "updated", "")
+                         or "")
+            articles.append({
+                "title": title,
+                "url": url,
+                "summary": summary[:600] if summary else "",
+                "source": source_name,
+                "source_key": source_key,
+                "published": published,
+                "author": author,
+            })
+        return articles
+    except Exception as exc:
+        logger.warning(
+            "feedparser failed for source=%s (%s); falling back to regex",
+            source_key, exc,
+        )
+        return _parse_rss_regex(xml_text, source_key)
 
 def scrape_arxiv():
     # arXiv asks for >= 3 seconds between requests; configurable via ARXIV_RATE_LIMIT env var.
