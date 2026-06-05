@@ -30,9 +30,9 @@ The canonical article shape is:
 
 ## Existing scrapers
 
-### `scrape_arxiv()` — 4 RSS feeds
+### `scrape_arxiv()` — 13 arXiv categories
 
-Fetches 4 hardcoded arXiv subject categories (cs.AI, cs.LG, cs.CL, cs.CV). The `config/sources.json` file has 13 entries under `arxiv_rss`; only these 4 are currently fetched. To enable the others, edit the `feeds` list in `scrape_arxiv()` in `news_tool.py`. Parses with `feedparser`, normalizes the version suffix out of the ID, and sets `arxiv_category` from the URL path. The first 5 entries per feed are kept (arXiv feeds can be huge).
+Fetches 13 arXiv subject categories from RSS feeds: cs.AI, cs.LG, cs.CL, cs.CV, cs.NE, cs.RO, cs.IR, cs.MA, cs.HC, stat.ML, eess.SP, q-fin.ST, cs.CR. The `feeds` list in `scrape_arxiv()` in `news_tool.py` and the `arxiv_rss` section of `config/sources.json` both list the same 13 categories. Parses with `feedparser`, normalizes the version suffix out of the ID, and sets `arxiv_category` from the URL path. The first 5 entries per feed are kept (arXiv feeds can be huge).
 
 This is the only scraper that sets `arxiv_category`, which the classifier uses as a strong prior.
 
