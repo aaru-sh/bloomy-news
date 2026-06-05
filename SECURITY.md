@@ -57,9 +57,16 @@ please give us a reasonable window to patch before publishing details.
   per write.
 - Defense against configuration leakage — all secrets live in `.env`
   (gitignored); tracked JSON uses `${VAR}` placeholders.
-- Defense against race conditions on file writes — all writes are
-  atomic (`tempfile.mkstemp` + `os.replace`); bookmark writes hold a
-  `threading.Lock`.
+- Defense against race conditions on file writes — bookmark writes
+  from `dashboard/serve.py` (via `save_bookmarks_atomic`) and from
+  `database.py`'s `toggle_bookmark` helper both use the
+  `tempfile.mkstemp` + `os.replace` pattern and are serialized by a
+  module-level `threading.Lock`. `dashboard/generate_data.py`
+  (writes `dashboard_data.json`) and `scripts/scheduler.py`
+  (writes `.last_run`) use the same temp-file + rename pattern.
+  The single-user, localhost-only deployment makes contention
+  unlikely in practice; the atomic rename guards against torn
+  files on crash.
 
 ### Out of scope (by design)
 

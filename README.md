@@ -2,7 +2,7 @@
 
 A self-hosted news desk for people who follow AI, machine learning, cybersecurity, and finance. Bloomy News runs on your own machine, pulls fresh articles from eight public sources twice a day, sorts them into six categories, removes duplicates, and shows the result in a local dashboard and a Telegram digest — no cloud, no account, no telemetry.
 
-If you are new to the AI field, the rest of this README is written so that you can understand every line. If you have built news aggregators before, skip the **Concepts** section and head straight to [Quick start](#quick-start).
+If you have built news aggregators before, head straight to [Quick start](#quick-start).
 
 [![Tests](https://github.com/aaru-sh/bloomy-news/actions/workflows/test.yml/badge.svg)](https://github.com/aaru-sh/bloomy-news/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -17,19 +17,7 @@ Bloomy News is built for developers and researchers who follow AI, ML, finance, 
 
 ---
 
-## What this project does, in plain English
-
-A **news aggregator** is a program that reads articles from many different websites and combines them in one place. The "many different websites" part is interesting because every website publishes news differently. Some expose a feed (a small, structured file that says "here are my latest 20 articles"). Some offer an **API** (an official door for programs to ask for the latest articles). Some have neither, and you have to parse the HTML yourself. Bloomy News does all three.
-
-Bloomy News runs **eight scrapers** (one per source type) and writes the result into a single **SQLite database** file. After the articles are in the database, three things happen:
-
-1. A **classifier** looks at each article's title and summary and decides which of six **categories** it belongs to (LLM, Neural Nets, ML Research, AI Applications, Finance, Cybersecurity). The default classifier is a hand-written keyword matcher — no neural network, no GPU, no API cost. It is fast, deterministic, and runs offline. If `sentence-transformers` is installed (see [Classification](#classification) below), an embedding-based classifier kicks in automatically — higher accuracy on ambiguous titles, at the cost of a one-time ~80 MB model download and ~1 GB of disk for PyTorch.
-2. A **deduplicator** removes articles that are essentially the same. The same press release often appears on five different sites, and arXiv papers get re-posted as the authors update them; both cases are caught.
-3. Two **publishers** make the data visible: a local HTTP **dashboard** at `http://127.0.0.1:8080` (only reachable from your own machine), and a **Telegram digest** that posts the top three articles per category to a channel of your choice.
-
-A **scheduler** repeats the whole process every 12 hours — at 12:00 and 24:00 local time. If your machine was asleep at 12:00, the scheduler runs the pipeline as soon as you start it again (with a 60-second delay so it doesn't fight with the boot process), and then resumes the 12-hour cadence.
-
-The whole project is **one folder, one Python interpreter, and three optional API keys**. No Docker, no Postgres, no Redis, no cloud function, no telemetry.
+## New to RSS / SQL / APIs? Start with [docs/NEWCOMERS.md](docs/NEWCOMERS.md).
 
 ---
 
@@ -89,10 +77,6 @@ Details for every platform are in [Deployment](#deployment--windows-linux-macos-
 
 ---
 
-> New to AI/ML? See [Concepts for newcomers](docs/NEWCOMERS.md) for a plain-English primer on what this project does and how the parts fit together.
-
----
-
 ## What's in the box
 
 ```
@@ -135,10 +119,10 @@ bloomy-news/
 <details>
 <summary><strong>Prerequisites — what you need to install before Bloomy News</strong></summary>
 
-- **Python 3.8 or newer.** Tested on 3.8, 3.9, 3.10, 3.11, and 3.12. If you do not have Python, download it from [python.org](https://python.org) and check "Add to PATH" on Windows. To check what you have, run `python --version` in a terminal.
-- **pip** — Python's package manager. It ships with Python, so if you have Python, you have pip. Run `pip --version` to confirm.
-- **git** — a version-control tool. You need it to clone the repository. Download from [git-scm.com](https://git-scm.com). Run `git --version` to confirm.
-- **A terminal** — PowerShell on Windows, Terminal.app or iTerm2 on macOS, any terminal on Linux. You will type a few commands.
+- **Python 3.8 or newer.** Tested on 3.8, 3.9, 3.10, 3.11, and 3.12. Check with `python --version`.
+- **pip** — ships with Python. Verify with `pip --version`.
+- **git** — clone tool. Verify with `git --version`.
+- **A terminal** — PowerShell on Windows, Terminal.app or iTerm2 on macOS, any terminal on Linux.
 - **~50 MB of free disk** for the SQLite database and the historical `.md.gz` archive.
 - **Windows 10 or 11** for the registry-based autostart scheduler. On Linux/macOS, the scheduler works as a foreground loop or can be wrapped with `cron` / `systemd` / `launchd`.
 - **A Telegram bot token** (optional, but recommended) — create one in five minutes by talking to [@BotFather](https://t.me/BotFather) on Telegram.
@@ -153,8 +137,6 @@ That is the entire prerequisite list. No Docker, no Node.js, no database server,
 <summary><strong>Installation — step by step, every platform</strong></summary>
 
 ### 1. Clone the repository
-
-Cloning means "download a copy of the project to your machine". `git clone` creates a new folder named `bloomy-news` in your current directory and copies the entire project history into it.
 
 ```bash
 git clone https://github.com/aaru-sh/bloomy-news.git
@@ -181,17 +163,17 @@ You can also install the project as an editable package if you prefer:
 pip install -e .
 ```
 
-Both approaches do the same thing. The `-e` flag (editable) means your changes to the source code take effect without re-installing; the `-r requirements.txt` form is simpler and works for non-developers.
+Both approaches work. Use `-e` (editable) if you intend to modify the source.
 
 ### 3. Configure secrets (optional)
 
-A **secret** is something you do not want to publish — an API key, a bot token, a password. In software projects, secrets live in a file named `.env` (short for "environment") that is **gitignored** (excluded from version control so it never gets pushed to GitHub). Every developer copies a template named `.env.example`, renames it to `.env`, and fills in their own secrets.
+Copy the template and fill in any of the three optional keys. `.env` is gitignored.
 
 ```bash
 cp .env.example .env
 ```
 
-Now edit `.env` and fill in any of the three optional keys:
+Edit `.env`:
 
 ```bash
 TELEGRAM_BOT_TOKEN=123456789:ABCdef-GHIjkl_MNOpqrSTUvwxYZ
@@ -204,8 +186,6 @@ If a key is missing, the corresponding scraper is skipped silently. The pipeline
 ### 4. Configure Telegram channels (optional)
 
 If you want the Telegram digest, edit `config/telegram.json` and set the channel IDs for your own bot and channels. The format is the standard Telegram chat ID (supergroup channels start with `-100`, then have the channel's numeric ID).
-
-A JSON file is a plain text file with a strict syntax for structured data. If you are not familiar with JSON, the shape is `"key": "value"` for strings, `{ ... }` for objects, and `[ ... ]` for lists. Editors like VS Code highlight the syntax and catch missing commas.
 
 ### 5. Run the pipeline
 
