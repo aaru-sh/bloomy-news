@@ -35,6 +35,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Cache HuggingFace model
         uses: actions/cache@v4
@@ -44,10 +45,14 @@ jobs:
           restore-keys: |
             hf-${{ runner.os }}-sentence-transformers-all-MiniLM-L6-v2-
 
-      - name: Run unit tests
+      - name: Run unit tests with coverage
         env:
           HF_HUB_DISABLE_TELEMETRY: "1"
-        run: python -m unittest discover -s tests -v
+        run: |
+          coverage run -m unittest discover -s tests -v
+          # Threshold is intentionally conservative. Current: ~57%.
+          # After v1.2.0 scraper tests merge: ~75%. Raise as coverage grows.
+          coverage report --fail-under=50
 
       - name: Run fresh-install smoke test
         run: python scripts/smoke_test.py
