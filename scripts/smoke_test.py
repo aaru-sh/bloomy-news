@@ -215,7 +215,7 @@ def check_classifier():
     try:
         sys.path.insert(0, str(BASE))
         import news_tool  # noqa: F401
-        cat, conf, tags, subcat = news_tool.classify_article({
+        cat, conf, tags, subcat, _embedding = news_tool.classify_article({
             "title": "A new transformer architecture for large language models",
             "summary": "Comparing GPT and BERT on common NLP benchmarks",
         })
