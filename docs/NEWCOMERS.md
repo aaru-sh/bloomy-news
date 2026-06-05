@@ -4,6 +4,22 @@ This document is a plain-English primer for people who are new to the AI/ML fiel
 
 ---
 
+## What this project does, in plain English
+
+A **news aggregator** is a program that reads articles from many different websites and combines them in one place. The "many different websites" part is interesting because every website publishes news differently. Some expose a feed (a small, structured file that says "here are my latest 20 articles"). Some offer an **API** (an official door for programs to ask for the latest articles). Some have neither, and you have to parse the HTML yourself. Bloomy News does all three.
+
+Bloomy News runs **eight scrapers** (one per source type) and writes the result into a single **SQLite database** file. After the articles are in the database, three things happen:
+
+1. A **classifier** looks at each article's title and summary and decides which of six **categories** it belongs to (LLM, Neural Nets, ML Research, AI Applications, Finance, Cybersecurity). The default classifier is a hand-written keyword matcher — no neural network, no GPU, no API cost. It is fast, deterministic, and runs offline. If `sentence-transformers` is installed (see [Classification](#classification) below), an embedding-based classifier kicks in automatically — higher accuracy on ambiguous titles, at the cost of a one-time ~80 MB model download and ~1 GB of disk for PyTorch.
+2. A **deduplicator** removes articles that are essentially the same. The same press release often appears on five different sites, and arXiv papers get re-posted as the authors update them; both cases are caught.
+3. Two **publishers** make the data visible: a local HTTP **dashboard** at `http://127.0.0.1:8080` (only reachable from your own machine), and a **Telegram digest** that posts the top three articles per category to a channel of your choice.
+
+A **scheduler** repeats the whole process every 12 hours — at 12:00 and 24:00 local time. If your machine was asleep at 12:00, the scheduler runs the pipeline as soon as you start it again (with a 60-second delay so it doesn't fight with the boot process), and then resumes the 12-hour cadence.
+
+The whole project is **one folder, one Python interpreter, and three optional API keys**. No Docker, no Postgres, no Redis, no cloud function, no telemetry.
+
+---
+
 ## Concepts for newcomers
 
 This section explains every technical term used in the rest of the README. If you are already familiar with RSS, APIs, classifiers, and SQL, you can skip to [What's in the box](#whats-in-the-box).
@@ -87,3 +103,7 @@ At read time, the dashboard reads from the database first. The filesystem archiv
 - **Local HTTP server** (`dashboard/serve.py`) — serves the three HTML pages, the CSS, the JavaScript, and a small JSON API. It binds to `127.0.0.1:8080`, which is the **loopback** address — your machine can reach it, your network cannot. If you ran it on `0.0.0.0`, anyone on your Wi-Fi could open the dashboard. We deliberately don't.
 - **Scheduler** (`scripts/scheduler.py`) — a small loop that runs the pipeline twice a day. It uses the **Windows registry** on Windows (the `HKCU\...\Run` key is the standard place for "start this at login" entries) and a foreground loop on Linux/macOS that you can wrap with `cron`, `systemd`, or `launchd`.
 - **Telegram bot** (`scripts/telegram_bot.py`) — uses the [Telegram Bot API](https://core.telegram.org/bots/api) to post the daily digest. You create a bot via [@BotFather](https://t.me/BotFather), get a token, and the bot posts messages to whichever channel you add it to. Telegram is a free, reliable channel for short digests — much cheaper than running a web server with push notifications.
+
+---
+
+*You are reading `docs/NEWCOMERS.md`. When you are ready to install, head back to the [README](../README.md).*
