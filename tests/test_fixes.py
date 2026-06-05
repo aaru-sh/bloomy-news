@@ -483,6 +483,59 @@ class TestJaccardPrefilter(unittest.TestCase):
                                 f"Jaccard score too low: {score}")
         self.assertEqual(method, 'title_similarity')
 
+    def test_is_duplicate_jaccard_raw_titles(self):
+        from database import store_article, is_duplicate
+
+        recent = (datetime.now() - timedelta(days=1)).isoformat()
+
+        ok1, id1 = store_article({
+            'title': 'alpha bravo charlie delta',
+            'url': 'https://example.com/jaccard-raw/1',
+            'summary': '',
+            'source': 'test',
+            'category': 'LLM',
+            'published': recent,
+        })
+        self.assertTrue(ok1)
+        self.assertIsNotNone(id1)
+
+        ok2, _ = store_article({
+            'title': 'alpha bravo charlie',
+            'url': 'https://example.com/jaccard-raw/2',
+            'summary': '',
+            'source': 'test',
+            'category': 'LLM',
+            'published': recent,
+        })
+        self.assertTrue(ok2)
+
+        is_dup, similar_id, score, method = is_duplicate(
+            'alpha bravo charlie delta foxtrot',
+            'https://example.com/jaccard-raw/new', '',
+        )
+        self.assertTrue(is_dup, f"near-duplicate not flagged: score={score}")
+        self.assertGreaterEqual(score, 0.66, f"Jaccard too low: {score}")
+        self.assertEqual(similar_id, id1,
+                         f"flagged wrong id: {similar_id} != {id1}")
+        self.assertEqual(method, 'title_similarity')
+
+        ok3, _ = store_article({
+            'title': 'completely different words here',
+            'url': 'https://example.com/jaccard-raw/3',
+            'summary': '',
+            'source': 'test',
+            'category': 'LLM',
+            'published': recent,
+        })
+        self.assertTrue(ok3)
+
+        is_dup, similar_id, score, method = is_duplicate(
+            'unique isolated words phrases',
+            'https://example.com/jaccard-raw/new2', '',
+        )
+        self.assertFalse(is_dup,
+                         f"unrelated title incorrectly flagged: score={score}")
+
 
 class TestClassifierVisibility(unittest.TestCase):
     """Regression: main() must tell the user which classifier is running."""
