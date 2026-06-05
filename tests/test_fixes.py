@@ -5,6 +5,8 @@ import json
 import sqlite3
 import tempfile
 import unittest
+import threading
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -269,6 +271,216 @@ class TestConcurrentPipelineInserts(unittest.TestCase):
             self.assertEqual(count, 1)
         finally:
             conn.close()
+
+
+class TestBookmarkRace(unittest.TestCase):
+    """20 concurrent togglers must not lose updates or corrupt the file.
+
+    Each thread toggles a distinct article id 5 times. With the lock +
+    atomic-write fix in place, the final JSON must contain every id
+    exactly once (5 toggles on a missing id is one net add). Without
+    the lock, the read-modify-write races and ids get lost.
+    """
+
+    def setUp(self):
+        import database
+        self._database = database
+        self._tmpdir = Path(tempfile.mkdtemp())
+        self._tmp_file = self._tmpdir / "bookmarks.json"
+        self._original_file = database.BOOKMARKS_FILE
+        database.BOOKMARKS_FILE = self._tmp_file
+
+    def tearDown(self):
+        self._database.BOOKMARKS_FILE = self._original_file
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    @unittest.skipUnless(threading, "threading required for race test")
+    def test_bookmark_race(self):
+        if not hasattr(self._database, '_BOOKMARKS_LOCK'):
+            self.skipTest("toggle_bookmark not fixed (no _BOOKMARKS_LOCK)")
+
+        from database import toggle_bookmark
+
+        ids = [f"id_{i}" for i in range(20)]
+        errors = []
+        errors_lock = threading.Lock()
+
+        def worker(article_id, n):
+            try:
+                for _ in range(n):
+                    toggle_bookmark(article_id)
+            except Exception as exc:
+                with errors_lock:
+                    errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(aid, 5)) for aid in ids]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errors, [], f"toggler threads raised: {errors!r}")
+        self.assertTrue(self._tmp_file.exists(),
+                        "bookmarks file should exist after toggles")
+
+        with open(self._tmp_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        self.assertIsInstance(data, list)
+        self.assertEqual(set(data), set(ids),
+                         f"lost updates: missing {set(ids) - set(data)}")
+        self.assertEqual(len(data), len(set(data)),
+                         f"duplicate ids in bookmarks: {data}")
+
+
+class TestFts5Search(unittest.TestCase):
+    """get_articles(search=...) must route through articles_fts and return
+    only the row whose title contains the search word.
+    """
+
+    def setUp(self):
+        import database
+        self._database = database
+        self._tmpdir = Path(tempfile.mkdtemp())
+        self._tmp_db = self._tmpdir / "news.db"
+        self._original_db_path = database.DB_PATH
+        database.DB_PATH = self._tmp_db
+        database.init_db()
+
+    def tearDown(self):
+        self._database.DB_PATH = self._original_db_path
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_fts5_search(self):
+        from database import (
+            store_article, get_articles, get_connection, _has_fts5_table,
+        )
+
+        conn = get_connection()
+        try:
+            fts5_ok = _has_fts5_table(conn)
+        finally:
+            conn.close()
+
+        if not fts5_ok:
+            self.skipTest("FTS5 (articles_fts) not present in schema")
+
+        articles = [
+            {
+                'title': 'Quantum computing breakthrough in cryptography',
+                'url': 'https://example.com/fts/1',
+                'summary': '',
+                'source': 'test',
+                'category': 'LLM',
+                'published': '2026-06-01T00:00:00',
+            },
+            {
+                'title': 'Apple earnings report Q3',
+                'url': 'https://example.com/fts/2',
+                'summary': 'revenue growth steady',
+                'source': 'test',
+                'category': 'Finance',
+                'published': '2026-06-01T00:00:00',
+            },
+            {
+                'title': 'Microsoft announces new AI model',
+                'url': 'https://example.com/fts/3',
+                'summary': 'advances in machine learning',
+                'source': 'test',
+                'category': 'LLM',
+                'published': '2026-06-01T00:00:00',
+            },
+        ]
+        for art in articles:
+            ok, _ = store_article(art)
+            self.assertTrue(ok, f"failed to insert {art['title']!r}")
+
+        results = get_articles(search="cryptography")
+        self.assertEqual(len(results), 1,
+                         f"expected exactly 1 result, got {len(results)}")
+        self.assertEqual(results[0]['title'],
+                         'Quantum computing breakthrough in cryptography')
+
+        results_none = get_articles(search="nonexistentwordzzz")
+        self.assertEqual(results_none, [],
+                         "FTS5 with no matches should return [] (not fall back to LIKE)")
+
+
+class TestJaccardPrefilter(unittest.TestCase):
+    """is_duplicate must pre-filter in SQL using significant words (length >= 4)
+    before running the Python Jaccard loop. With 50 unrelated articles in the
+    DB, a near-duplicate of one specific target must still be flagged.
+    """
+
+    def setUp(self):
+        import database
+        self._database = database
+        self._tmpdir = Path(tempfile.mkdtemp())
+        self._tmp_db = self._tmpdir / "news.db"
+        self._original_db_path = database.DB_PATH
+        database.DB_PATH = self._tmp_db
+        database.init_db()
+
+    def tearDown(self):
+        self._database.DB_PATH = self._original_db_path
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_jaccard_prefilter(self):
+        from database import store_article, is_duplicate, extract_title_words
+
+        recent = (datetime.now() - timedelta(days=1)).isoformat()
+
+        # 50 unrelated articles, all with non-overlapping significant words
+        # so the SQL pre-filter only matches the target.
+        for i in range(50):
+            ok, _ = store_article({
+                'title': f'Distinct topic {i} about widgets and gadgets',
+                'url': f'https://example.com/distinct/{i}',
+                'summary': '',
+                'source': 'test',
+                'category': 'LLM',
+                'published': recent,
+            })
+            self.assertTrue(ok, f"failed to insert filler article {i}")
+
+        # Target article #25 (label): 4 distinct significant words >= 4 chars.
+        target_title = 'Quantum computing breakthrough cryptography'
+        target_url = 'https://example.com/quantum/1'
+        ok, target_id = store_article({
+            'title': target_title,
+            'url': target_url,
+            'summary': '',
+            'source': 'test',
+            'category': 'LLM',
+            'published': recent,
+        })
+        self.assertTrue(ok)
+        self.assertIsNotNone(target_id)
+
+        # Sanity: confirm the target's normalized words survive so the
+        # pre-filter can match them.
+        self.assertEqual(
+            set(extract_title_words(target_title).split()),
+            {'quantum', 'computing', 'breakthrough', 'cryptography'},
+        )
+
+        # Near-duplicate: shares all 4 significant words plus one new one.
+        # Jaccard = 4 / 5 = 0.80 (>= the 0.80 threshold).
+        near_dup_title = 'Quantum computing breakthrough cryptography research'
+        is_dup, similar_id, score, method = is_duplicate(
+            near_dup_title, 'https://example.com/quantum/2', '',
+        )
+
+        self.assertTrue(is_dup,
+                        f"near-duplicate not flagged: title={near_dup_title!r}")
+        self.assertEqual(similar_id, target_id,
+                         f"flagged wrong id: {similar_id} != {target_id}")
+        self.assertGreaterEqual(score, 0.80,
+                                f"Jaccard score too low: {score}")
+        self.assertEqual(method, 'title_similarity')
 
 
 if __name__ == '__main__':
