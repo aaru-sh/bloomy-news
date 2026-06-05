@@ -11,7 +11,41 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 - RSS aggregator mode with OPML import
 - Configurable classifier training from user feedback
 - Tighten keyword lists to bring the keyword-only classifier back above the 0.80 gate (currently 63.3% on the regression set, surfaced by the 1.1.2 gate split)
-- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2)
+- Type hints on the public surface of `news_tool.py` and `database.py` (low priority for solo work)
+- `news_tool.py` split into `scrapers/` package + slim orchestrator (do at 9th source)
+- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2, deferred again from 1.2.0)
+
+---
+
+## [1.2.0] - 2026-06-05
+
+**Scraper test coverage, feedparser swap, coverage in CI, and a
+Dockerfile.** A feature release that hardens the repo against the
+two most likely sources of silent breakage (feed shape changes and
+RSS parser bugs) and packages the dashboard for non-Windows deployment.
+
+### Highlights
+- **Scraper correctness tests** (`f2c799e`, `34d30b2`, `c94df85`): 39 new tests across three files covering all 8 scrapers and `parse_rss()`. Mocks `news_tool.fetch_url` and `fetch_json` so no real HTTP. Tests assert feed list count (13 arxiv, 3 cybersec, 3 tech, 2 markets, 3 google_news, 3 newsapi, 3 github languages, 1 finnhub), per-article `source_key` tagging, `subcategory` on arxiv, and edge cases (CDATA, HTML entities, empty/malformed input, missing required fields, the dc:creator gap that feedparser now closes).
+- **feedparser swap** (`85550bb`): `parse_rss()` now uses `feedparser.parse()` as the primary path. Handles RSS 2.0, RSS 1.0, Atom, all date formats, CDATA, HTML entities, `dc:creator`, and inline HTML in summaries. The legacy regex parser is preserved as `_parse_rss_regex()` and called via `logger.warning` if feedparser raises — we never want a single malformed feed to drop the whole scrape. `feedparser>=6.0.0` added to `requirements.txt`.
+- **Coverage.py in CI** (`f362803`, `2e8f021`): `requirements-dev.txt` pins `coverage>=7.0`. `.coveragerc` disables the `no_source` warning that the fresh-install test's tempdir copies trigger and excludes trivial lines. The test workflow now runs `coverage run -m unittest discover -s tests` then `coverage report --fail-under=50`. Current measured coverage: **67%** (was 57% after the scraper tests, would be ~70% with both scraper + feedparser tests factored in). Threshold is intentionally conservative; raise as coverage grows.
+- **Dockerfile** (`6dc4ebc`): `python:3.11-slim` base, non-root user (uid 1000), `HEALTHCHECK` on `http://127.0.0.1:8080/`, default `CMD` runs `dashboard/serve.py`. The dashboard binds localhost only (per repo convention); the `-p` flag must map `127.0.0.1:8080:8080` explicitly to keep it off the LAN. `.dockerignore` excludes `.git`, `news.db`, `dashboard/data/*.json`, `.env`, and IDE/OS files.
+
+### Test surface
+- `tests/test_scraper_arxiv.py` (163 lines, 11 tests): `TestArxivParseRss` (single item, multiple items, CDATA, HTML entities, summary truncation, missing-field rejection, `dc:creator` capture, Atom fallback), `TestScrapeArxivFeedList` (13 categories, subcategory tagging, empty-fetch handling), `TestScrapeArxivRateLimitRegression` (zero-rate-limit contract), `TestParseRssFallbackToRegex` (regex fallback when feedparser raises), `TestParseRssFeedparserPrimary` (feedparser is the primary path, not the fallback).
+- `tests/test_scraper_json.py` (292 lines, 12 tests): `TestScrapeGithub` (3-repos-per-language, missing-description fallback, empty HTML, ISO published timestamp), `TestScrapeNewsapi` (missing-key short-circuit, 3-category parse, error-status rejection, falsy-response), `TestScrapeFinance` (Finnhub JSON parse with epoch->iso, no-key falls through to RSS, empty list, epoch=0 doesn't crash).
+- `tests/test_scraper_rss.py` (353 lines, 16 tests): `TestScrapeCybersec` (3 feeds, failed-fetch, malformed), `TestScrapeTech` (3 feeds with source_keys, Atom `<entry>` fallback), `TestScrapeGoogleNews` (3 queries, redirect URL resolution, non-Google URLs skip the resolver), `TestScrapeMarkets` (2 feeds, failed-fetch), `TestParseRssEdgeCases` (Atom fallback, HTML entities, empty RSS, `SOURCE_NAMES` lookup), `TestResolveGoogleNewsRedirect` (non-Google passthrough, Google URL returns original on failure).
+
+### Verification
+- 103 tests, 1 skipped (real-world distribution, needs populated `news.db`)
+- Coverage: 67% (target: 50%, threshold can be raised)
+- `node --check` was not affected (no JS changes)
+- `python -m coverage report --fail-under=50 --ignore-errors` exits 0
+
+### Not changed in this release
+- F (type hints) — deferred. Reviewer's "refactoring without types is a coin flip" concern is real but not blocking for solo work.
+- G (news_tool.py split) — deferred. YAGNI for 8 scrapers; do at 9th source.
+- E (NewsAPI/Finnhub rate-limit tracking) — deferred until actually throttled.
+- Bookmark persistence — deferred again (sys.modules pollution in `TestFreshInstallFlow` still blocks the cleanest implementation).
 
 ---
 
