@@ -251,7 +251,7 @@
             const a = sorted[i];
             const color = catColor[a.category] || '#888';
             const starred = isBookmarked(a.id);
-            const starClass = 'article-card-star' + (starred ? ' is-starred' : '');
+            const starClass = `article-card-star${starred ? ' is-starred' : ''}`;
             const starFill = starred ? 'currentColor' : 'none';
             const starAriaPressed = starred ? 'true' : 'false';
             const starLabel = starred ? 'Remove bookmark' : 'Bookmark this article';
