@@ -728,5 +728,85 @@ class TestTelegramCategorizedSource(unittest.TestCase):
         db_called.assert_called_once()
 
 
+class TestMigrateFromFilesLogsErrors(unittest.TestCase):
+    """migrate_from_files() must NOT swallow exceptions silently.
+
+    The previous bare `except: continue` hid IOError on bad gzip,
+    UnicodeDecodeError on malformed content, and worse. A migration
+    that "skips" files without telling the operator why is a black
+    box. These tests pin the new behavior: every per-file failure
+    is logged at WARNING and the loop continues.
+    """
+
+    def setUp(self):
+        import database
+        self._database = database
+        self._tmpdir = Path(tempfile.mkdtemp())
+        self._tmp_db = self._tmpdir / "news.db"
+        self._original_db_path = database.DB_PATH
+        self._original_base = database.BASE
+        database.DB_PATH = self._tmp_db
+        database.BASE = self._tmpdir
+        database.init_db()
+
+        # Lay out a minimal category tree with one .md.gz file that
+        # the loop will encounter. The fixture is real on disk; we
+        # only monkey-patch the open() call.
+        cat_dir = self._tmpdir / "LLM" / "subA"
+        cat_dir.mkdir(parents=True)
+        self._md_file = cat_dir / "test.md.gz"
+        self._md_file.write_bytes(b"not actually a gzip, but the loop will still try")
+
+    def tearDown(self):
+        self._database.DB_PATH = self._original_db_path
+        self._database.BASE = self._original_base
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_ioerror_on_gzip_is_logged_and_skipped(self):
+        import gzip
+        from database import migrate_from_files
+
+        with patch.object(gzip, 'open', side_effect=IOError("corrupt header")):
+            with self.assertLogs('database', level='WARNING') as log_cm:
+                imported, skipped = migrate_from_files()
+
+        # Loop continued cleanly (didn't crash) and didn't import anything.
+        self.assertEqual(imported, 0)
+        self.assertEqual(skipped, 0)
+
+        # The IOError must be visible — that's the whole point of the fix.
+        joined = "\n".join(log_cm.output)
+        self.assertIn("Migration skipped", joined,
+                      f"expected 'Migration skipped' in log, got: {log_cm.output!r}")
+        self.assertIn("corrupt header", joined,
+                      f"expected IOError message in log, got: {log_cm.output!r}")
+        self.assertIn(str(self._md_file), joined,
+                      f"expected filename in log, got: {log_cm.output!r}")
+
+    def test_unicode_decode_error_is_logged_not_swallowed(self):
+        """A second failure mode: gzip.open succeeds but .read() raises
+        UnicodeDecodeError on garbage bytes. The exception must still
+        surface as a warning, not a silent skip.
+        """
+        import gzip
+        from database import migrate_from_files
+
+        fake_gz = MagicMock()
+        fake_gz.__enter__.return_value.read.side_effect = UnicodeDecodeError(
+            'utf-8', b'\xff\xfe', 0, 1, 'invalid start byte')
+        fake_gz.__enter__.return_value.__exit__.return_value = False
+        fake_gz.__exit__.return_value = False
+
+        with patch.object(gzip, 'open', return_value=fake_gz):
+            with self.assertLogs('database', level='WARNING') as log_cm:
+                imported, skipped = migrate_from_files()
+
+        self.assertEqual(imported, 0)
+        self.assertEqual(skipped, 0)
+        self.assertTrue(any("invalid start byte" in line for line in log_cm.output),
+                        f"UnicodeDecodeError not in log: {log_cm.output!r}")
+
+
 if __name__ == '__main__':
     unittest.main()
