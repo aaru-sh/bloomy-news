@@ -258,6 +258,15 @@ def scrape_arxiv():
         ("https://rss.arxiv.org/rss/cs.LG", "cs.LG"),
         ("https://rss.arxiv.org/rss/cs.CL", "cs.CL"),
         ("https://rss.arxiv.org/rss/cs.CV", "cs.CV"),
+        ("https://rss.arxiv.org/rss/cs.NE", "cs.NE"),
+        ("https://rss.arxiv.org/rss/cs.RO", "cs.RO"),
+        ("https://rss.arxiv.org/rss/cs.IR", "cs.IR"),
+        ("https://rss.arxiv.org/rss/cs.MA", "cs.MA"),
+        ("https://rss.arxiv.org/rss/cs.HC", "cs.HC"),
+        ("https://rss.arxiv.org/rss/stat.ML", "stat.ML"),
+        ("https://rss.arxiv.org/rss/eess.SP", "eess.SP"),
+        ("https://rss.arxiv.org/rss/q-fin.ST", "q-fin.ST"),
+        ("https://rss.arxiv.org/rss/cs.CR", "cs.CR"),
     ]
     articles = []
     for i, (url, cat) in enumerate(feeds):

@@ -6,16 +6,16 @@
     "cs.CL": "https://rss.arxiv.org/rss/cs.CL",
     "cs.AI": "https://rss.arxiv.org/rss/cs.AI",
     "cs.LG": "https://rss.arxiv.org/rss/cs.LG",
-    "cs.NE": "https://rss.arxiv.org/rss/cs.NE",
-    "cs.CR": "https://rss.arxiv.org/rss/cs.CR",
     "cs.CV": "https://rss.arxiv.org/rss/cs.CV",
+    "cs.NE": "https://rss.arxiv.org/rss/cs.NE",
     "cs.RO": "https://rss.arxiv.org/rss/cs.RO",
+    "cs.IR": "https://rss.arxiv.org/rss/cs.IR",
+    "cs.MA": "https://rss.arxiv.org/rss/cs.MA",
+    "cs.HC": "https://rss.arxiv.org/rss/cs.HC",
     "stat.ML": "https://rss.arxiv.org/rss/stat.ML",
-    "q-fin.CP": "https://rss.arxiv.org/rss/q-fin.CP",
-    "q-fin.TR": "https://rss.arxiv.org/rss/q-fin.TR",
-    "q-fin.PM": "https://rss.arxiv.org/rss/q-fin.PM",
-    "q-fin.RM": "https://rss.arxiv.org/rss/q-fin.RM",
-    "q-fin.ST": "https://rss.arxiv.org/rss/q-fin.ST"
+    "eess.SP": "https://rss.arxiv.org/rss/eess.SP",
+    "q-fin.ST": "https://rss.arxiv.org/rss/q-fin.ST",
+    "cs.CR": "https://rss.arxiv.org/rss/cs.CR"
   },
   "google_news_rss": {
     "llm": "https://news.google.com/rss/search?q=large+language+model+OR+LLM+OR+GPT+OR+Claude+OR+Gemini+OR+Llama&hl=en-US&gl=US&ceid=US:en",
