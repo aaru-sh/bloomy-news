@@ -11,9 +11,36 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 - RSS aggregator mode with OPML import
 - Configurable classifier training from user feedback
 - Tighten keyword lists to bring the keyword-only classifier back above the 0.80 gate (currently 63.3% on the regression set, surfaced by the 1.1.2 gate split)
-- Type hints on the public surface of `news_tool.py` and `database.py` (low priority for solo work)
-- `news_tool.py` split into `scrapers/` package + slim orchestrator (do at 9th source)
-- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2, deferred again from 1.2.0)
+- `news_tool.py` split into `scrapers/` package + slim orchestrator (do at 9th source; was deferred from 1.3.0)
+- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2, deferred again from 1.2.0, deferred again from 1.3.0)
+
+---
+
+## [1.3.0] - 2026-06-05
+
+**Type hints on the entire public surface.** A maintenance-quality
+release — no behavior changes, just static type information that
+catches the "function changed its return shape" class of bugs
+before they hit tests, and gives editors/IDEs something useful to
+hover over.
+
+### Highlights
+- **mypy added to the dev toolchain.** `mypy>=1.10.0` in `requirements-dev.txt`, `mypy.ini` at the project root scoped to `news_tool.py, database.py, scripts/, dashboard/`. Runs locally with `python -m mypy news_tool.py database.py`; the only Python-version requirement is mypy's own runtime (3.10+), the code itself stays 3.8-compatible at runtime because we used `Optional` / `List` / `Dict` / `Tuple` from the `typing` module rather than the 3.10+ `X | None` syntax.
+- **`news_tool.py` (982 lines, 27 functions) fully type-hinted.** Added `Article`, `ArticleList`, `CategoryMap`, `ClassifyResult` type aliases and a `from typing import ...` import block. Every public function now declares parameter and return types. The two `max(scores, key=...)` calls use a `lambda c: scores[c]` shim to satisfy mypy's strict `Callable` signature on `max`. The `_get_embedding_model` Optional `Connection` problem is gone (mypy 2.x requires the runtime type narrowing via `assert`).
+- **`database.py` (651 lines, 24 functions) fully type-hinted.** Same `Article` / `ArticleList` aliases. Functions that took `conn=None` and called `if own_conn: conn = get_connection()` got an explicit `assert conn is not None` after the assignment so mypy knows `conn` is non-None inside the `try` block.
+- **Type-narrowing fixes.** `_load_labeled_samples()` now raises a real `RuntimeError` when `importlib.util.spec_from_file_location()` returns `None` (e.g. `tests/test_classifier.py` missing at runtime) rather than crashing with a cryptic `AttributeError` on `spec.loader.exec_module`. The `get_articles` `params: List[Any]` annotation lets the FTS5/LIKE `extend(fts_ids)` work cleanly.
+
+### Verification
+- `python -m mypy news_tool.py database.py` → `Success: no issues found in 2 source files`
+- `python -m unittest discover -s tests` → 103 tests pass, 1 skipped (real-world distribution smoke test, needs populated `news.db`)
+
+### Not changed in this release
+- `news_tool.py` split — still deferred. The type hints are the precondition: with `Article` / `ArticleList` / `CategoryMap` / `ClassifyResult` aliases in place, the split is now a mechanical `from news_tool_module import ...` rather than a search-and-replace.
+- Bookmark persistence — still blocked on `TestFreshInstallFlow` sys.modules pollution.
+
+### Future type work
+- `scripts/` (scheduler, evaluate_classifier, telegram_bot) — currently excluded from mypy.ini scope to keep this release focused. Next pass.
+- `dashboard/` (serve.py, generate_data.py) — same.
 
 ---
 

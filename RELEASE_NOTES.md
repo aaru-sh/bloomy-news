@@ -1,7 +1,55 @@
 # Release notes — paste into the GitHub Release UI
 
 Copy everything below the line into the "Describe this release" box on
-https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.2.0
+https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.3.0
+
+---
+
+## Bloomy News v1.3.0 — Type hints on the public surface
+
+A maintenance-quality release. **No behavior changes** — every
+article, scrape, classifier decision, and Telegram message works
+exactly as it did in v1.2.0. The only change is static type
+information on the public surface of `news_tool.py` and `database.py`.
+
+### What changed
+
+- **mypy in the dev toolchain.** `mypy>=1.10.0` in
+  `requirements-dev.txt`, `mypy.ini` at the project root. Scoped to
+  the two main modules for now (scripts/ and dashboard/ are next).
+  Run locally with `python -m mypy news_tool.py database.py`.
+- **`news_tool.py` (982 lines, 27 functions) fully type-hinted.**
+  Added `Article`, `ArticleList`, `CategoryMap`, `ClassifyResult`
+  type aliases so the dict-of-strings-the-shape-of-an-article is
+  named once. Every public function declares parameter and return
+  types; the rest of the codebase imports the aliases.
+- **`database.py` (651 lines, 24 functions) fully type-hinted.**
+  Same `Article` / `ArticleList` aliases. The "open fresh
+  connection if none provided" pattern in five functions got an
+  `assert conn is not None` after the assignment so mypy can follow
+  the type narrowing.
+- **One real bug fix folded in.** `_load_labeled_samples()` now
+  raises a clear `RuntimeError` when
+  `importlib.util.spec_from_file_location()` returns `None`, instead
+  of crashing with a cryptic `AttributeError` on a possibly-None
+  spec.
+
+### What was deferred
+
+- **`news_tool.py` split** — still deferred. The type hints are
+  the precondition: with `Article` / `ArticleList` / `CategoryMap`
+  / `ClassifyResult` aliases in place, the split is now a
+  mechanical move rather than a rewrite.
+- **Bookmark persistence** — still blocked on
+  `TestFreshInstallFlow` sys.modules pollution.
+- **`scripts/` and `dashboard/` type hints** — out of scope for
+  this release, scoped follow-up.
+
+### Upgrading
+
+No schema changes. No config changes. `git pull`, then
+`pip install -r requirements-dev.txt` if you want to run mypy
+locally.
 
 ---
 
