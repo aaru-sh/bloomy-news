@@ -832,6 +832,8 @@ def main():
     finally:
         conn.close()
 
+    classifier_mode = "embedding" if EMBEDDING_AVAILABLE else "keyword (install sentence-transformers for better accuracy)"
+    print(f"  Classifier: {classifier_mode}")
     print(f"  New: {new_count} | Duplicates: {dup_count}")
     for cat in sorted(categorized.keys()):
         print(f"  {cat}: {len(categorized[cat])}")
