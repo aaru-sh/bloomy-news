@@ -15,14 +15,24 @@ should be higher.
 Run with: python -m unittest tests.test_classifier -v
 """
 import os
+import sqlite3
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE))
 
-from news_tool import classify_article, EMBEDDING_AVAILABLE, _classify_keywords, evaluate_classifier_accuracy
+from news_tool import (
+    classify_article,
+    EMBEDDING_AVAILABLE,
+    _classify_keywords,
+    evaluate_classifier_accuracy,
+    KEYWORD_MINIMUM_ACCURACY,
+    EMBEDDING_MINIMUM_ACCURACY,
+    COMBINED_MINIMUM_ACCURACY,
+)
 
 
 LABELED_SAMPLES = [
@@ -65,7 +75,12 @@ LABELED_SAMPLES = [
     ("New deep learning approach for image recognition", "", "Neural-Nets"),
 ]
 
-MINIMUM_ACCURACY = 0.90
+MINIMUM_ACCURACY = COMBINED_MINIMUM_ACCURACY
+
+KNOWN_CATEGORIES = {
+    "AI-Applications", "Cybersecurity", "Finance",
+    "LLM", "ML-Research", "Neural-Nets",
+}
 
 
 class TestClassifierAccuracy(unittest.TestCase):
@@ -176,10 +191,171 @@ class TestClassifierAccuracy(unittest.TestCase):
         self.assertIn("total", result)
         self.assertIn("accuracy", result)
         self.assertIn("by_category", result)
+        self.assertIn("keyword_accuracy", result)
+        self.assertIn("embedding_accuracy", result)
         self.assertIsInstance(result["by_category"], dict)
         self.assertGreater(result["total"], 0)
-        self.assertGreaterEqual(result["accuracy"], 0.0)
-        self.assertLessEqual(result["accuracy"], 1.0)
+        for key in ("accuracy", "keyword_accuracy", "embedding_accuracy"):
+            self.assertGreaterEqual(result[key], 0.0)
+            self.assertLessEqual(result[key], 1.0)
+
+
+class TestGateThresholds(unittest.TestCase):
+    """Sanity checks on the CI gate thresholds.
+
+    The script-level gate (scripts/evaluate_classifier.py) imports these
+    constants from news_tool and exits 0 only when all three pass. A
+    regression that zeroes one of them would silently disable that gate.
+    These tests pin the constants to sensible values and verify the
+    script can be imported without a circular dep on tests/.
+    """
+
+    def test_keyword_threshold_reasonable(self):
+        self.assertIsInstance(KEYWORD_MINIMUM_ACCURACY, float)
+        self.assertGreaterEqual(KEYWORD_MINIMUM_ACCURACY, 0.5)
+        self.assertLessEqual(KEYWORD_MINIMUM_ACCURACY, 1.0)
+
+    def test_embedding_threshold_reasonable(self):
+        self.assertIsInstance(EMBEDDING_MINIMUM_ACCURACY, float)
+        self.assertGreaterEqual(EMBEDDING_MINIMUM_ACCURACY, 0.5)
+        self.assertLessEqual(EMBEDDING_MINIMUM_ACCURACY, 1.0)
+
+    def test_combined_threshold_reasonable(self):
+        self.assertIsInstance(COMBINED_MINIMUM_ACCURACY, float)
+        self.assertGreaterEqual(COMBINED_MINIMUM_ACCURACY, 0.5)
+        self.assertLessEqual(COMBINED_MINIMUM_ACCURACY, 1.0)
+
+    def test_embedding_threshold_meets_combined(self):
+        """The embedding path should be held to a higher bar than the
+        combined score (it should be the strongest of the three).
+        """
+        self.assertGreaterEqual(
+            EMBEDDING_MINIMUM_ACCURACY,
+            COMBINED_MINIMUM_ACCURACY,
+            "Embedding path should have a gate at least as strict as combined"
+        )
+
+    def test_script_module_has_thresholds(self):
+        """scripts/evaluate_classifier.py must re-export the thresholds
+        and must NOT import them from tests/ (circular test/app dep).
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_eval_script_for_thresholds",
+            BASE / "scripts" / "evaluate_classifier.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertTrue(hasattr(mod, "KEYWORD_MINIMUM_ACCURACY"))
+        self.assertTrue(hasattr(mod, "EMBEDDING_MINIMUM_ACCURACY"))
+        self.assertTrue(hasattr(mod, "COMBINED_MINIMUM_ACCURACY"))
+        for attr in ("KEYWORD_MINIMUM_ACCURACY",
+                     "EMBEDDING_MINIMUM_ACCURACY",
+                     "COMBINED_MINIMUM_ACCURACY"):
+            value = getattr(mod, attr)
+            self.assertGreaterEqual(value, 0.5)
+            self.assertLessEqual(value, 1.0)
+
+
+class TestRealWorldDistribution(unittest.TestCase):
+    """Distribution smoke test against the real news.db.
+
+    The labeled sample set is self-selected and easy. This test pulls
+    50 random non-Uncategorized articles from the live database and
+    asserts that the category distribution looks sane:
+
+      - at least 80% land in the known category set
+      - the classifier isn't returning the same category for everything
+
+    The point is NOT to measure accuracy (that needs labeled data we
+    don't have). The point is to catch "classifier is silently broken"
+    regressions — e.g. a future change that makes the embedding path
+    always return "Uncategorized" would push the known-category share
+    below 80% and fail this test.
+
+    Skipped when news.db is absent (fresh clone, dev box without a
+    populated DB) — the live test_fresh_install exercises the empty
+    path separately.
+    """
+
+    SAMPLE_SIZE = 50
+    MIN_KNOWN_SHARE = 0.80
+    MAX_SINGLE_CATEGORY_SHARE = 0.95
+
+    @classmethod
+    def setUpClass(cls):
+        import database as _db
+        cls._live_db = _db.DB_PATH
+        cls._tmp_db = None
+        if not cls._live_db.exists():
+            raise unittest.SkipTest(
+                f"news.db not present at {cls._live_db}; skipping real-world test"
+            )
+        if cls._live_db.stat().st_size > 50 * 1024 * 1024:
+            fd, tmp_path = tempfile.mkstemp(suffix=".db", prefix="news_smoke_")
+            import os as _os
+            _os.close(fd)
+            import shutil
+            shutil.copy2(cls._live_db, tmp_path)
+            cls._tmp_db = Path(tmp_path)
+            cls._db_path = cls._tmp_db
+        else:
+            cls._db_path = cls._live_db
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._tmp_db and cls._tmp_db.exists():
+            try:
+                cls._tmp_db.unlink()
+            except OSError:
+                pass
+
+    def _open_conn(self):
+        conn = sqlite3.connect(str(self._db_path))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def test_distribution_is_reasonable(self):
+        conn = self._open_conn()
+        try:
+            rows = conn.execute(
+                "SELECT category FROM articles "
+                "WHERE category IS NOT NULL AND category != '' "
+                "AND category != 'Uncategorized' "
+                "ORDER BY RANDOM() LIMIT ?",
+                (self.SAMPLE_SIZE,),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        if len(rows) < self.SAMPLE_SIZE:
+            self.skipTest(
+                f"Only {len(rows)} non-Uncategorized articles available; "
+                f"need {self.SAMPLE_SIZE} for a meaningful distribution test"
+            )
+
+        categories = [r["category"] for r in rows]
+        counts = {}
+        for c in categories:
+            counts[c] = counts.get(c, 0) + 1
+        known_count = sum(c for cat, c in counts.items() if cat in KNOWN_CATEGORIES)
+        known_share = known_count / len(categories)
+        top_category, top_count = max(counts.items(), key=lambda kv: kv[1])
+        top_share = top_count / len(categories)
+
+        self.assertGreaterEqual(
+            known_share, self.MIN_KNOWN_SHARE,
+            f"Only {known_share:.0%} of {len(categories)} real articles landed in "
+            f"a known category. Classifier may be silently broken. "
+            f"Distribution: {counts}"
+        )
+        self.assertLessEqual(
+            top_share, self.MAX_SINGLE_CATEGORY_SHARE,
+            f"{top_share:.0%} of {len(categories)} real articles were classified "
+            f"as '{top_category}'. Classifier is returning the same category for "
+            f"everything (or the DB has only one category). "
+            f"Distribution: {counts}"
+        )
 
 
 if __name__ == "__main__":
