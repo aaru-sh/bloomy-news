@@ -176,9 +176,11 @@ def is_duplicate(title, url, summary='', conn=None):
         title_words = extract_title_words(title)
         if not title_words:
             return False, None, 0.0, None
-        anchor_words = sorted(title_words.split(), key=len, reverse=True)[:3]
-        like_clause = " OR ".join(["title_words LIKE ?"] * len(anchor_words))
-        like_params = [f'%{w}%' for w in anchor_words]
+        significant_words = [w for w in title_words.split() if len(w) >= 4]
+        if not significant_words:
+            return False, None, 0.0, None
+        like_clause = " OR ".join(["title_words LIKE ?"] * len(significant_words))
+        like_params = [f'%{w}%' for w in significant_words]
         rows = conn.execute(f"""
             SELECT id, title, title_words FROM articles
             WHERE published > datetime('now', '-7 days')
@@ -271,22 +273,52 @@ def store_article(article, conn=None):
         if own_conn:
             conn.close()
 
-def _fts_search_ids(conn, query, limit=500):
-    """Run FTS5 search; return list of rowids or [] on any failure.
+def _has_fts5_table(conn):
+    """Return True if the articles_fts virtual table is configured.
 
-    Defensive: never propagate exceptions out of the search path.
+    The check hits sqlite_master on the supplied connection so the result
+    is per-DB and works correctly when tests swap DB_PATH between cases.
     """
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='articles_fts'"
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
+def _fts_search_ids(conn, query, limit=500):
+    """Run FTS5 search; return list of rowids, [] for no matches, or None on failure.
+
+    Returns None to signal "FTS5 is not available, fall back to LIKE".
+    Returns [] for a legitimate empty result set.
+    """
+    if not _has_fts5_table(conn):
+        return None
     try:
         fts_query = ' OR '.join(f'"{w}"' for w in query.split() if w)
         if not fts_query:
-            return []
+            return None
         rows = conn.execute(
             "SELECT rowid FROM articles_fts WHERE articles_fts MATCH ? ORDER BY rank LIMIT ?",
             (fts_query, limit),
         ).fetchall()
         return [r[0] for r in rows]
     except Exception:
-        return []
+        return None
+
+
+def _like_search_ids(conn, query, limit=500):
+    """LIKE-based fallback used when FTS5 is unavailable or the FTS5 query is invalid."""
+    like = f"%{query}%"
+    rows = conn.execute(
+        "SELECT id FROM articles "
+        "WHERE title LIKE ? OR summary LIKE ? OR title_words LIKE ? "
+        "ORDER BY published DESC, id DESC LIMIT ?",
+        (like, like, like, limit),
+    ).fetchall()
+    return [r[0] for r in rows]
 
 
 def get_articles(category=None, source=None, date_from=None, date_to=None, search=None, is_read=None, limit=50, offset=0):
@@ -313,11 +345,22 @@ def get_articles(category=None, source=None, date_from=None, date_to=None, searc
             params.append(1 if is_read else 0)
         if search:
             fts_ids = _fts_search_ids(conn, search)
-            if not fts_ids:
+            if fts_ids is None:
+                # FTS5 unavailable or invalid query: fall back to LIKE so the
+                # search degrades gracefully on builds without articles_fts.
+                like_ids = _like_search_ids(conn, search)
+                if not like_ids:
+                    return []
+                placeholders = ",".join("?" * len(like_ids))
+                conditions.append(f"a.id IN ({placeholders})")
+                params.extend(like_ids)
+            elif fts_ids:
+                placeholders = ",".join("?" * len(fts_ids))
+                conditions.append(f"a.id IN ({placeholders})")
+                params.extend(fts_ids)
+            else:
+                # FTS5 returned no matches - legitimate empty result.
                 return []
-            placeholders = ",".join("?" * len(fts_ids))
-            conditions.append(f"a.id IN ({placeholders})")
-            params.extend(fts_ids)
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         query = f"SELECT * FROM articles a{where} ORDER BY a.published DESC, a.id DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
