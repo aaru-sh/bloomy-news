@@ -99,7 +99,7 @@ class TestClassifierAccuracy(unittest.TestCase):
         correct = 0
         failures = []
         for title, summary, expected in LABELED_SAMPLES:
-            cat, _confidence, _tags, _subcat = classify_article(
+            cat, _confidence, _tags, _subcat, _embedding = classify_article(
                 {"title": title, "summary": summary}
             )
             if cat == expected:
@@ -121,45 +121,57 @@ class TestClassifierAccuracy(unittest.TestCase):
         )
 
     def test_no_misclassify_obvious_finance(self):
-        cat, _, _, _ = classify_article(
+        cat, _, _, _, _ = classify_article(
             {"title": "Bitcoin price crashes 40% in single day", "summary": ""}
         )
         self.assertEqual(cat, "Finance")
 
     def test_no_misclassify_obvious_llm(self):
-        cat, _, _, _ = classify_article(
+        cat, _, _, _, _ = classify_article(
             {"title": "Open-source Llama 3 weights released for fine-tuning", "summary": ""}
         )
         self.assertEqual(cat, "LLM")
 
     def test_no_misclassify_obvious_cybersecurity(self):
-        cat, _, _, _ = classify_article(
+        cat, _, _, _, _ = classify_article(
             {"title": "Major data breach exposes millions of records", "summary": ""}
         )
         self.assertEqual(cat, "Cybersecurity")
 
     def test_classifier_handles_empty_input(self):
-        cat, confidence, tags, subcat = classify_article(
+        cat, confidence, tags, subcat, embedding = classify_article(
             {"title": "", "summary": ""}
         )
         self.assertEqual(cat, "Uncategorized")
         self.assertEqual(confidence, 0.0)
         self.assertIsInstance(tags, list)
         self.assertIsInstance(subcat, str)
+        self.assertIsNone(embedding, "empty input should yield no embedding")
 
     def test_classifier_return_shape(self):
-        """Every call must return (cat: str, confidence: float, tags: list, subcat: str)."""
+        """Every call must return (cat, confidence, tags, subcat, embedding).
+
+        The 5th element is the sentence-transformer vector (numpy
+        ndarray) when the embedding classifier is active, or None when
+        the keyword fallback runs (or when the input was so low-signal
+        that no embedding should be persisted).
+        """
         result = classify_article(
             {"title": "GPT-5 announced", "summary": "OpenAI's new model"}
         )
-        self.assertEqual(len(result), 4)
-        cat, confidence, tags, subcat = result
+        self.assertEqual(len(result), 5)
+        cat, confidence, tags, subcat, embedding = result
         self.assertIsInstance(cat, str)
         self.assertIsInstance(confidence, (int, float))
         self.assertIsInstance(tags, list)
         self.assertIsInstance(subcat, str)
         self.assertGreaterEqual(confidence, 0.0)
         self.assertLessEqual(confidence, 1.0)
+        # embedding is either None (keyword path) or a 1-D numpy array
+        if embedding is not None:
+            import numpy as np
+            self.assertIsInstance(embedding, np.ndarray)
+            self.assertEqual(embedding.ndim, 1)
 
     def test_keyword_word_boundary(self):
         """Word-boundary token matching prevents substring false positives.
@@ -176,7 +188,7 @@ class TestClassifierAccuracy(unittest.TestCase):
             "summary": "Social security benefits for retirees are expanding. "
                        "She's a runway model at fashion week.",
         }
-        cat, conf, tags, subcat = _classify_keywords(article)
+        cat, conf, tags, subcat, _embedding = _classify_keywords(article)
         self.assertNotEqual(cat, "Cybersecurity")
         self.assertNotEqual(cat, "ML-Research")
 

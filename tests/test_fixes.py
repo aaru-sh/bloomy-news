@@ -52,7 +52,7 @@ class TestClassifierFallback(unittest.TestCase):
         import news_tool
         if getattr(news_tool, 'EMBEDDING_AVAILABLE', False):
             self.skipTest("Keyword fallback test skipped when embedding classifier is active")
-        primary, conf, tags, subcat = news_tool.classify_article({
+        primary, conf, tags, subcat, _embedding = news_tool.classify_article({
             "title": "XYZ random unrelated text",
             "summary": "nothing in here matches anything either"
         })
@@ -62,7 +62,7 @@ class TestClassifierFallback(unittest.TestCase):
 
     def test_llm_match(self):
         import news_tool
-        primary, conf, tags, subcat = news_tool.classify_article({
+        primary, conf, tags, subcat, _embedding = news_tool.classify_article({
             "title": "New transformer architecture for large language models",
             "summary": "GPT and BERT comparison"
         })
@@ -71,7 +71,7 @@ class TestClassifierFallback(unittest.TestCase):
 
     def test_no_fallback_to_ai_applications(self):
         import news_tool
-        primary, conf, tags, subcat = news_tool.classify_article({
+        primary, conf, tags, subcat, _embedding = news_tool.classify_article({
             "title": "A paint company merger announcement today",
             "summary": "AkzoNobel acquisition by Nippon Paint"
         })
@@ -407,6 +407,130 @@ class TestFts5Search(unittest.TestCase):
         results_none = get_articles(search="nonexistentwordzzz")
         self.assertEqual(results_none, [],
                          "FTS5 with no matches should return [] (not fall back to LIKE)")
+
+
+class TestEmbeddingPersistence(unittest.TestCase):
+    """store_article(embedding=...) must serialize the vector to the
+    `embedding` BLOB column and load_article_embedding() must round-trip
+    it back to a numpy array bit-for-bit.
+
+    Locks down the contract for the v1.1.x embedding-column fix: the
+    schema column has existed since at least v1.0.0, but until now
+    store_article() never wrote to it, so every re-classification had
+    to re-run the sentence-transformers model from scratch. The
+    round-trip test uses a random 384-dim float32 vector (the
+    MiniLM-L6-v2 dimension) and asserts the reconstructed array is
+    exactly equal element-wise.
+    """
+
+    def setUp(self):
+        import database
+        self._database = database
+        self._tmpdir = Path(tempfile.mkdtemp())
+        self._tmp_db = self._tmpdir / "news.db"
+        self._original_db_path = database.DB_PATH
+        database.DB_PATH = self._tmp_db
+        database.init_db()
+
+    def tearDown(self):
+        self._database.DB_PATH = self._original_db_path
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_round_trip_384dim_float32(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed; embedding persistence requires numpy")
+
+        from database import (
+            EMBEDDING_DIM, EMBEDDING_DTYPE,
+            store_article, load_article_embedding,
+        )
+
+        self.assertEqual(EMBEDDING_DIM, 384)
+        self.assertEqual(EMBEDDING_DTYPE, "float32")
+
+        rng = np.random.default_rng(seed=20260605)
+        original = rng.standard_normal(EMBEDDING_DIM).astype(EMBEDDING_DTYPE)
+        self.assertEqual(original.shape, (EMBEDDING_DIM,))
+        self.assertEqual(original.dtype, np.float32)
+
+        ok, article_id = store_article(
+            {
+                "title": "Embedding round-trip test article",
+                "url": "https://example.com/embedding/roundtrip/1",
+                "summary": "",
+                "source": "test",
+                "category": "LLM",
+                "published": "2026-06-05T00:00:00",
+            },
+            embedding=original,
+        )
+        self.assertTrue(ok, "store_article should report is_new=True for a fresh URL")
+        self.assertIsNotNone(article_id)
+
+        loaded = load_article_embedding(article_id)
+        self.assertIsNotNone(loaded, "load_article_embedding must return a vector for a row that was stored with one")
+        self.assertEqual(loaded.shape, (EMBEDDING_DIM,))
+        self.assertEqual(loaded.dtype, np.dtype(EMBEDDING_DTYPE))
+        np.testing.assert_array_equal(loaded, original)
+
+    def test_load_returns_none_when_no_embedding_stored(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("numpy not installed")
+
+        from database import store_article, load_article_embedding
+
+        ok, article_id = store_article(
+            {
+                "title": "Article with no embedding",
+                "url": "https://example.com/embedding/none/1",
+                "summary": "",
+                "source": "test",
+                "category": "LLM",
+                "published": "2026-06-05T00:00:00",
+            },
+        )
+        self.assertTrue(ok)
+        self.assertIsNone(load_article_embedding(article_id))
+
+    def test_load_returns_none_for_missing_id(self):
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("numpy not installed")
+
+        from database import load_article_embedding
+        self.assertIsNone(load_article_embedding(999999))
+
+    def test_default_embedding_param_keeps_legacy_behavior(self):
+        """store_article() with no embedding kwarg must still work for
+        callers that pre-date the v1.1.x fix (the keyword-fallback path
+        and migrate_from_files are the main ones).
+        """
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("numpy not installed")
+
+        from database import store_article, load_article_embedding
+
+        ok, article_id = store_article(
+            {
+                "title": "Legacy call shape: no embedding kwarg",
+                "url": "https://example.com/embedding/legacy/1",
+                "summary": "",
+                "source": "test",
+                "category": "Finance",
+                "published": "2026-06-05T00:00:00",
+            },
+        )
+        self.assertTrue(ok)
+        self.assertIsNotNone(article_id)
+        self.assertIsNone(load_article_embedding(article_id))
 
 
 class TestJaccardPrefilter(unittest.TestCase):
