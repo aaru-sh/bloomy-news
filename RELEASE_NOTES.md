@@ -1,7 +1,103 @@
 # Release notes — paste into the GitHub Release UI
 
 Copy everything below the line into the "Describe this release" box on
-https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.3.0
+https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.4.0
+
+---
+
+## Bloomy News v1.4.0 — `news_tool.py` split into 13 focused files
+
+A maintenance-quality release. **No behavior changes** — the
+pipeline scrapes, classifies, stores, and digests exactly the
+same articles as v1.3.0. The only change is module organization:
+every file in the project is now under 280 lines, and adding a
+9th source is a 30-line new file in `scrapers/` instead of
+editing a 1000+ line monolith.
+
+### What changed
+
+- **`scrapers/` package (11 files).**
+  - `scrapers/_http.py` (66 lines) — `fetch_url`, `fetch_json`,
+    `SOURCE_NAMES`, and the `Article` / `ArticleList` type
+    aliases. The lowest layer of the scraper stack.
+  - `scrapers/_rss.py` (140 lines) — `parse_rss` with the
+    feedparser primary path and `_parse_rss_regex` fallback
+    (the legacy parser is kept so a feedparser crash on a
+    malformed feed doesn't drop the whole scrape).
+  - `scrapers/_keywords.py` (135 lines) — `CATEGORY_KEYWORDS`,
+    `SUBCATEGORY_KEYWORDS`, the `STOPWORDS` set, and the
+    tokenization helpers (`_tokenize`, `_keyword_tokens`,
+    `_filter_keywords`) used by the keyword classifier.
+  - `scrapers/arxiv.py` (40 lines) — 13 arXiv feeds with the
+    `ARXIV_RATE_LIMIT` env var (3.0s default).
+  - `scrapers/github.py` (47 lines) — 3 language trending
+    pages parsed via HTML regex.
+  - `scrapers/newsapi.py` (30 lines) — NewsAPI
+    `top-headlines` for `technology` / `science` / `business`.
+  - `scrapers/cybersec.py` (19 lines) — 3 security RSS feeds.
+  - `scrapers/tech.py` (19 lines) — TechCrunch / The Verge /
+    Ars Technica.
+  - `scrapers/finance.py` (40 lines) — Finnhub JSON +
+    Yahoo Finance / Investing.com RSS.
+  - `scrapers/google_news.py` (72 lines) — 3 queries + the
+    `resolve_google_news_redirect` URL un-redirector.
+  - `scrapers/markets.py` (18 lines) — CNBC + MarketWatch.
+- **`classifier.py` (257 lines).** Owns the embedding state
+  (`_embedding_model`, `_category_embeddings`,
+  `_embedding_load_failed`), the `CATEGORY_EXAMPLES` centroid
+  prompts, and the three classification functions. The gate
+  thresholds (`KEYWORD_MINIMUM_ACCURACY=0.80`,
+  `EMBEDDING=0.95`, `COMBINED=0.90`) live here.
+- **`telegram.py` (163 lines).** Owns the digest formatter,
+  the `urllib`-based `_send_telegram_message` (so tests
+  can monkey-patch it without touching urllib), the
+  category/emoji constants, and `post_to_telegram`. Reads
+  `config/telegram.json` the same way as before.
+- **`news_tool.py` (273 lines, down from 982).** Slim
+  orchestrator: imports all 8 scrapers from `scrapers/`,
+  calls `classifier.classify_article`, persists via
+  `database.store_article`, and posts via
+  `telegram.post_to_telegram`. Also owns the CLI entry
+  point (`main()` + `evaluate_classifier_accuracy()` +
+  the `python news_tool.py evaluate` flag).
+- **Re-export pattern in `news_tool.py`.** All public symbols
+  are re-exported so existing callers and tests work
+  unchanged via `from news_tool import scrape_arxiv, ...`
+  and `news_tool.scrape_arxiv()`.
+
+### Test updates
+
+- 43 `patch.object(self.news_tool, "fetch_url", ...)` patches
+  in `test_scraper_*.py` and `test_fixes.py` were updated to
+  `patch("scrapers.<source>.fetch_url", ...)`. The original
+  patches intercepted the call inside the same module; after
+  the split, each scraper module has its own `fetch_url`
+  binding, so the patch must target the namespace where the
+  function is actually called. This is the standard
+  "patch where it's used" Python pattern.
+- `test_fixes.py` Telegram tests now patch
+  `telegram._send_telegram_message` (the new home) and
+  `telegram.logger` (the new logger).
+- `TestFreshInstallFlow` is **untouched** — it still passes
+  12/12. Bookmark persistence remains blocked on a separate
+  test rewrite (subprocess-based) in v1.5.0.
+
+### Verification
+
+- 103 tests pass, 1 skipped (the `TestRealWorldDistribution`
+  test that needs a populated `news.db`)
+- 68% coverage (same as v1.3.0)
+- mypy clean across 16 source files
+  (`news_tool.py`, `database.py`, `classifier.py`,
+  `telegram.py`, `scrapers/`)
+
+### What was deferred
+
+- **Bookmark persistence** — still deferred to v1.5.0.
+  This release ships the file split that bookmark
+  persistence was waiting on, but the test rewrite
+  required to unblock the implementation is its own
+  piece of work.
 
 ---
 

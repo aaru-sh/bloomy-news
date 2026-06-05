@@ -11,8 +11,76 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 - RSS aggregator mode with OPML import
 - Configurable classifier training from user feedback
 - Tighten keyword lists to bring the keyword-only classifier back above the 0.80 gate (currently 63.3% on the regression set, surfaced by the 1.1.2 gate split)
-- `news_tool.py` split into `scrapers/` package + slim orchestrator (do at 9th source; was deferred from 1.3.0)
-- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2, deferred again from 1.2.0, deferred again from 1.3.0)
+- `news_tool.py` split into `scrapers/` package + slim orchestrator (shipped in 1.4.0)
+- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2, deferred again from 1.2.0, deferred again from 1.3.0, deferred again from 1.4.0)
+- Test rewrite: `test_fresh_install.py` -> subprocess-based (required before bookmark persistence can land)
+
+---
+
+## [1.4.0] - 2026-06-05
+
+**`news_tool.py` split into 13 focused files.** A maintenance-quality
+release — no behavior changes, the pipeline scrapes, classifies,
+stores, and digests exactly the same articles as v1.3.0. The only
+change is module organization: every file in the project is now
+under 280 lines, and adding a 9th source is a 30-line new file in
+`scrapers/` instead of editing a 1000+ line monolith.
+
+### Highlights
+- **`scrapers/` package (11 files).** `_http.py` is the shared
+  HTTP / `SOURCE_NAMES` / type-alias layer. `_rss.py` owns the
+  feedparser + regex fallback path. `_keywords.py` owns the
+  CATEGORY_KEYWORDS, SUBCATEGORY_KEYWORDS, and tokenization used
+  by the keyword classifier. The 8 source scrapers (arxiv, github,
+  newsapi, cybersec, tech, finance, google_news, markets) are
+  each 18-72 lines and contain only the feed list and any
+  source-specific logic (arXiv rate limit, GitHub HTML regex,
+  Google News redirect resolver).
+- **`classifier.py` (257 lines).** Owns the embedding state
+  (`_embedding_model`, `_category_embeddings`, `_embedding_load_failed`),
+  the `CATEGORY_EXAMPLES` centroid prompts, and the three
+  classification functions (`_classify_embedding`,
+  `_classify_keywords`, `classify_article`). The gate thresholds
+  (KEYWORD_MINIMUM_ACCURACY=0.80, EMBEDDING=0.95, COMBINED=0.90)
+  live here too.
+- **`telegram.py` (163 lines).** Owns the digest formatter,
+  the `urllib`-based `_send_telegram_message` (so tests can
+  monkey-patch it without touching urllib), the category/emoji
+  constants, and `post_to_telegram`. Reads the `config/telegram.json`
+  config the same way as before.
+- **`news_tool.py` (273 lines, down from 982).** Slim
+  orchestrator: imports all 8 scrapers from `scrapers/`, calls
+  `classifier.classify_article`, persists via
+  `database.store_article`, and posts via
+  `telegram.post_to_telegram`. Also owns the CLI entry point
+  (`main()` + `evaluate_classifier_accuracy()` + the
+  `python news_tool.py evaluate` flag). All public symbols are
+  re-exported so existing callers and tests work unchanged
+  via `from news_tool import scrape_arxiv, ...` and
+  `news_tool.scrape_arxiv()`.
+
+### Test updates
+- 43 `patch.object(self.news_tool, "fetch_url", ...)` patches in
+  `test_scraper_*.py` and `test_fixes.py` were updated to
+  `patch("scrapers.<source>.fetch_url", ...)`. The original
+  patches intercepted the call inside the same module;
+  after the split, each scraper module has its own
+  `fetch_url` binding, so the patch must target the
+  namespace where the function is actually called. This is
+  the standard "patch where it's used" Python pattern.
+- `test_fixes.py` Telegram tests now patch
+  `telegram._send_telegram_message` (the new home) and
+  `telegram.logger` (the new logger).
+- The `TestFreshInstallFlow` suite is **untouched** — it
+  still passes 12/12. Bookmark persistence remains blocked
+  on a separate test rewrite (subprocess-based) in v1.5.0.
+
+### What was deferred
+- **Bookmark persistence** — still deferred to v1.5.0.
+  This release ships the file split that bookmark
+  persistence was waiting on, but the test rewrite
+  required to unblock the implementation is its own
+  piece of work.
 
 ---
 
