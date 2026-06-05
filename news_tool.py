@@ -101,6 +101,51 @@ SUBCATEGORY_KEYWORDS = {
     },
 }
 
+STOPWORDS = frozenset({
+    "the", "a", "an", "is", "are", "of", "to", "in", "for", "on", "with", "and", "or",
+})
+
+_TOKEN_RE = re.compile(r"\b[\w'-]+\b")
+
+
+def _tokenize(text):
+    """Lowercase + tokenize text into a frozenset of word tokens."""
+    if not text:
+        return frozenset()
+    return frozenset(_TOKEN_RE.findall(text.lower()))
+
+
+def _keyword_tokens(keyword):
+    """Lowercase + tokenize a keyword into a frozenset of word tokens."""
+    if not keyword:
+        return frozenset()
+    return frozenset(_TOKEN_RE.findall(keyword.lower()))
+
+
+def _filter_keywords(keywords):
+    """Drop keywords that are < 3 chars or composed entirely of stopwords."""
+    result = []
+    for kw in keywords:
+        if len(kw) < 3:
+            continue
+        toks = _keyword_tokens(kw)
+        if not toks or toks.issubset(STOPWORDS):
+            continue
+        result.append(kw)
+    return result
+
+
+_FILTERED_CATEGORY_KEYWORDS = {
+    cat: _filter_keywords(keywords) for cat, keywords in CATEGORY_KEYWORDS.items()
+}
+_FILTERED_SUBCATEGORY_KEYWORDS = {
+    cat: {
+        sub: _filter_keywords(sub_keywords)
+        for sub, sub_keywords in subcats.items()
+    }
+    for cat, subcats in SUBCATEGORY_KEYWORDS.items()
+}
+
 SOURCE_NAMES = {
     "arxiv": "arXiv",
     "github": "GitHub",
@@ -595,12 +640,24 @@ def _classify_embedding(article):
 
 
 def _classify_keywords(article):
-    text = f"{article.get('title', '')} {article.get('summary', '')}".lower()
+    # Multi-word keywords require ALL of their tokens to appear in the text
+    # (in any order); single-word keywords require exact token membership.
+    # This eliminates substring false positives (e.g. "social security" ->
+    # Cybersecurity via the bare word "security", "small" -> ML via the
+    # substring "ml" inside "small").
+    text_tokens = _tokenize(f"{article.get('title', '')} {article.get('summary', '')}")
+
+    def keyword_matches(kw):
+        kw_tokens = _keyword_tokens(kw)
+        if not kw_tokens:
+            return False
+        if len(kw_tokens) == 1:
+            return next(iter(kw_tokens)) in text_tokens
+        return kw_tokens.issubset(text_tokens)
 
     scores = {}
-    for cat, keywords in CATEGORY_KEYWORDS.items():
-        score = sum(1 for kw in keywords if kw in text)
-        scores[cat] = score
+    for cat, keywords in _FILTERED_CATEGORY_KEYWORDS.items():
+        scores[cat] = sum(1 for kw in keywords if keyword_matches(kw))
 
     max_score = max(scores.values(), default=0)
 
@@ -615,12 +672,12 @@ def _classify_keywords(article):
 
     # Determine subcategory
     subcategory = "news"
-    if primary in SUBCATEGORY_KEYWORDS:
-        subcats = SUBCATEGORY_KEYWORDS[primary]
+    if primary in _FILTERED_SUBCATEGORY_KEYWORDS:
+        subcats = _FILTERED_SUBCATEGORY_KEYWORDS[primary]
         best_subcat = "news"
         best_score = 0
         for subcat_name, subcat_keywords in subcats.items():
-            subcat_score = sum(1 for kw in subcat_keywords if kw in text)
+            subcat_score = sum(1 for kw in subcat_keywords if keyword_matches(kw))
             if subcat_score > best_score:
                 best_score = subcat_score
                 best_subcat = subcat_name
@@ -805,5 +862,92 @@ def main():
     
     logger.info(f"Pipeline complete: {len(all_articles)} scraped, {new_count} new, {dup_count} duplicates, {error_count} errors")
 
+def _load_labeled_samples():
+    """Load LABELED_SAMPLES from tests/test_classifier.py.
+
+    Importing the test module gives a single source of truth: when the
+    labeled set is updated for a new release, the accuracy eval picks
+    it up automatically.
+    """
+    import importlib.util
+    test_path = BASE / "tests" / "test_classifier.py"
+    spec = importlib.util.spec_from_file_location("_classifier_tests_eval", test_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return list(mod.LABELED_SAMPLES)
+
+
+def evaluate_classifier_accuracy(limit: int = 200) -> dict:
+    """Run the labeled sample set through both classifiers.
+
+    Returns {"correct": N, "total": T, "accuracy": P, "by_category": {...}}
+    where "correct" counts a sample as correct if EITHER classifier
+    produced the expected category. Per-classifier accuracy and a
+    per-category breakdown are also returned. Prints a one-line CLI
+    summary.
+    """
+    samples = _load_labeled_samples()[:limit]
+
+    keyword_correct = 0
+    embedding_correct = 0
+    combined_correct = 0
+    by_category = {}
+
+    for title, summary, expected in samples:
+        article = {"title": title, "summary": summary}
+
+        kw_cat, _, _, _ = _classify_keywords(article)
+        kw_match = (kw_cat == expected)
+        if kw_match:
+            keyword_correct += 1
+
+        emb_cat, _, _, _ = _classify_embedding(article)
+        emb_match = (emb_cat == expected)
+        if emb_match:
+            embedding_correct += 1
+
+        if kw_match or emb_match:
+            combined_correct += 1
+
+        cat_stats = by_category.setdefault(
+            expected,
+            {"total": 0, "keyword_correct": 0, "embedding_correct": 0,
+             "combined_correct": 0},
+        )
+        cat_stats["total"] += 1
+        if kw_match:
+            cat_stats["keyword_correct"] += 1
+        if emb_match:
+            cat_stats["embedding_correct"] += 1
+        if kw_match or emb_match:
+            cat_stats["combined_correct"] += 1
+
+    total = len(samples)
+    accuracy = combined_correct / total if total else 0.0
+    keyword_accuracy = keyword_correct / total if total else 0.0
+    embedding_accuracy = embedding_correct / total if total else 0.0
+
+    summary_line = (
+        f"Accuracy: {accuracy*100:.1f}% ({combined_correct}/{total})  "
+        f"keyword={keyword_accuracy*100:.1f}%  "
+        f"embedding={embedding_accuracy*100:.1f}%"
+    )
+    print(summary_line)
+
+    return {
+        "correct": combined_correct,
+        "total": total,
+        "accuracy": accuracy,
+        "keyword_accuracy": keyword_accuracy,
+        "embedding_accuracy": embedding_accuracy,
+        "by_category": by_category,
+    }
+
+
 if __name__ == "__main__":
-    main()
+    import json
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "evaluate":
+        print(json.dumps(evaluate_classifier_accuracy(), indent=2))
+    else:
+        main()
