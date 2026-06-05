@@ -197,7 +197,7 @@ class TestScrapeArxivFeedList(unittest.TestCase):
         if not self._requests_available:
             self.skipTest("requests not available")
         seen_urls = []
-        with patch.object(self.news_tool, "fetch_url",
+        with patch("scrapers.arxiv.fetch_url",
                           side_effect=lambda url, **kw: (seen_urls.append(url), "")[1]):
             self.news_tool.scrape_arxiv()
         self.assertEqual(len(seen_urls), 13,
@@ -218,7 +218,7 @@ class TestScrapeArxivFeedList(unittest.TestCase):
                 items=_arxiv_item("2606.00001", f"Paper in {cat}", "summary"),
             )
 
-        with patch.object(self.news_tool, "fetch_url", side_effect=fake_fetch):
+        with patch("scrapers.arxiv.fetch_url", side_effect=fake_fetch):
             articles = self.news_tool.scrape_arxiv()
 
         self.assertEqual(len(articles), 13)
@@ -234,7 +234,7 @@ class TestScrapeArxivFeedList(unittest.TestCase):
         def fake_fetch(url, **kw):
             return ""  # simulate empty / failed response
 
-        with patch.object(self.news_tool, "fetch_url", side_effect=fake_fetch):
+        with patch("scrapers.arxiv.fetch_url", side_effect=fake_fetch):
             articles = self.news_tool.scrape_arxiv()
         self.assertEqual(articles, [],
                          "all-empty fetches should yield zero articles, not raise")
@@ -265,7 +265,7 @@ class TestScrapeArxivRateLimitRegression(unittest.TestCase):
         with patch.dict(os.environ, {"ARXIV_RATE_LIMIT": "0.0"}):
             with patch.object(self.news_tool.time, "sleep",
                               side_effect=lambda s: sleep_calls.append(s)):
-                with patch.object(self.news_tool, "fetch_url", return_value=""):
+                with patch("scrapers.arxiv.fetch_url", return_value=""):
                     self.news_tool.scrape_arxiv()
         self.assertEqual(sleep_calls, [0.0] * 12,
                          f"expected 12 zero-duration sleeps (13 feeds - 1), "

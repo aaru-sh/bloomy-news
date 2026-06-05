@@ -88,7 +88,7 @@ class TestScrapeCybersec(unittest.TestCase):
             fetched_urls.append(url)
             return rss
 
-        with patch.object(self.news_tool, "fetch_url", side_effect=fake_fetch):
+        with patch("scrapers.cybersec.fetch_url", side_effect=fake_fetch):
             articles = self.news_tool.scrape_cybersec()
 
         self.assertEqual(len(articles), 3,
@@ -102,14 +102,14 @@ class TestScrapeCybersec(unittest.TestCase):
     def test_failed_fetch_skips_feed(self):
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url", return_value=""):
+        with patch("scrapers.cybersec.fetch_url", return_value=""):
             articles = self.news_tool.scrape_cybersec()
         self.assertEqual(articles, [])
 
     def test_malformed_rss_does_not_crash(self):
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url", return_value="not valid xml"):
+        with patch("scrapers.cybersec.fetch_url", return_value="not valid xml"):
             articles = self.news_tool.scrape_cybersec()
         self.assertEqual(articles, [])
 
@@ -140,7 +140,7 @@ class TestScrapeTech(unittest.TestCase):
             fetched_urls.append(url)
             return rss
 
-        with patch.object(self.news_tool, "fetch_url", side_effect=fake_fetch):
+        with patch("scrapers.tech.fetch_url", side_effect=fake_fetch):
             articles = self.news_tool.scrape_tech()
 
         self.assertEqual(len(articles), 3)
@@ -161,7 +161,7 @@ class TestScrapeTech(unittest.TestCase):
                 return atom
             return ""
 
-        with patch.object(self.news_tool, "fetch_url", side_effect=fake_fetch):
+        with patch("scrapers.tech.fetch_url", side_effect=fake_fetch):
             articles = self.news_tool.scrape_tech()
         self.assertEqual(len(articles), 1)
         self.assertEqual(articles[0]["title"], "Atom article")
@@ -196,9 +196,9 @@ class TestScrapeGoogleNews(unittest.TestCase):
     def test_three_queries_four_articles_each(self):
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url",
+        with patch("scrapers.google_news.fetch_url",
                           return_value=self.GN_CANONICAL_RSS), \
-             patch.object(self.news_tool, "resolve_google_news_redirect",
+             patch("scrapers.google_news.resolve_google_news_redirect",
                           side_effect=lambda u: u):
             articles = self.news_tool.scrape_google_news()
         # 1 article × 3 queries = 3
@@ -211,10 +211,9 @@ class TestScrapeGoogleNews(unittest.TestCase):
         through resolve_google_news_redirect before being returned."""
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url",
+        with patch("scrapers.google_news.fetch_url",
                           return_value=self.GN_REDIRECT_RSS), \
-             patch.object(
-                 self.news_tool, "resolve_google_news_redirect",
+             patch("scrapers.google_news.resolve_google_news_redirect",
                  return_value="https://www.reuters.com/resolved-article"
              ) as resolve_mock:
             articles = self.news_tool.scrape_google_news()
@@ -228,9 +227,9 @@ class TestScrapeGoogleNews(unittest.TestCase):
         must NOT be passed through the resolver."""
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url",
+        with patch("scrapers.google_news.fetch_url",
                           return_value=self.GN_CANONICAL_RSS), \
-             patch.object(self.news_tool, "resolve_google_news_redirect") as resolve_mock:
+             patch("scrapers.google_news.resolve_google_news_redirect") as resolve_mock:
             self.news_tool.scrape_google_news()
         resolve_mock.assert_not_called()
 
@@ -258,7 +257,7 @@ class TestScrapeMarkets(unittest.TestCase):
             fetched_urls.append(url)
             return rss
 
-        with patch.object(self.news_tool, "fetch_url", side_effect=fake_fetch):
+        with patch("scrapers.markets.fetch_url", side_effect=fake_fetch):
             articles = self.news_tool.scrape_markets()
         self.assertEqual(len(articles), 2)
         self.assertEqual(len(fetched_urls), 2)
@@ -268,7 +267,7 @@ class TestScrapeMarkets(unittest.TestCase):
     def test_failed_fetch_returns_empty(self):
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url", return_value=""):
+        with patch("scrapers.markets.fetch_url", return_value=""):
             articles = self.news_tool.scrape_markets()
         self.assertEqual(articles, [])
 
@@ -344,7 +343,7 @@ class TestResolveGoogleNewsRedirect(unittest.TestCase):
         url = "https://news.google.com/articles/CAIiE_FAKE"
         with patch.object(self.news_tool.urllib.request, "urlopen",
                           side_effect=OSError("network down")):
-            with patch.object(self.news_tool, "fetch_url", return_value=""):
+            with patch("scrapers.google_news.fetch_url", return_value=""):
                 result = self.news_tool.resolve_google_news_redirect(url)
         self.assertEqual(result, url, "on resolution failure, return original URL")
 

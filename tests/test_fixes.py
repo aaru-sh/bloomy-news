@@ -15,6 +15,8 @@ BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE / 'dashboard'))
 
+import telegram  # for telegram.logger patch (post_to_telegram moved out of news_tool)
+
 
 class TestTitleSimilarity(unittest.TestCase):
     def test_identical_titles(self):
@@ -713,7 +715,7 @@ class TestArxivRateLimit(unittest.TestCase):
 
         with patch.dict(os.environ, {'ARXIV_RATE_LIMIT': '0.01'}):
             with patch.object(self._news_tool.time, 'sleep', side_effect=fake_sleep):
-                with patch.object(self._news_tool, 'fetch_url', side_effect=fake_fetch_url):
+                with patch("scrapers.arxiv.fetch_url", side_effect=fake_fetch_url):
                     self._news_tool.scrape_arxiv()
 
         self.assertGreaterEqual(
@@ -747,7 +749,7 @@ class TestArxivRateLimit(unittest.TestCase):
         env_without_limit = {k: v for k, v in os.environ.items() if k != 'ARXIV_RATE_LIMIT'}
         with patch.dict(os.environ, env_without_limit, clear=True):
             with patch.object(self._news_tool.time, 'sleep', side_effect=fake_sleep):
-                with patch.object(self._news_tool, 'fetch_url', side_effect=fake_fetch_url):
+                with patch("scrapers.arxiv.fetch_url", side_effect=fake_fetch_url):
                     self._news_tool.scrape_arxiv()
 
         for s in sleep_calls:
@@ -768,7 +770,7 @@ class TestTelegramCategorizedSource(unittest.TestCase):
         self.news_tool = news_tool
         self._sent = []
         self._patcher = patch.object(
-            news_tool, "_send_telegram_message",
+            telegram, "_send_telegram_message",
             side_effect=lambda token, chat_id, text: self._sent.append(
                 {"token": token, "chat_id": chat_id, "text": text}
             ) or {"ok": True},
@@ -831,7 +833,7 @@ class TestTelegramCategorizedSource(unittest.TestCase):
 
     def test_empty_categorized_falls_back_to_db_with_warning(self):
         with patch.object(
-            self.news_tool.logger, "warning"
+            telegram.logger, "warning"
         ) as warn_mock, patch.object(
             self.news_tool.database,
             "get_today_top_per_category",

@@ -62,7 +62,7 @@ class TestScrapeGithub(unittest.TestCase):
         canned HTML, the function returns 3 repos × 3 languages = 9."""
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url", return_value=self.GH_HTML):
+        with patch("scrapers.github.fetch_url", return_value=self.GH_HTML):
             articles = self.news_tool.scrape_github()
         self.assertEqual(len(articles), 9,
                          f"expected 3 repos × 3 langs = 9, got {len(articles)}")
@@ -77,7 +77,7 @@ class TestScrapeGithub(unittest.TestCase):
         a fallback 'Trending <lang> repository on GitHub' summary."""
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url", return_value=self.GH_HTML_NO_DESC):
+        with patch("scrapers.github.fetch_url", return_value=self.GH_HTML_NO_DESC):
             articles = self.news_tool.scrape_github()
         # 1 repo × 3 langs = 3
         self.assertEqual(len(articles), 3)
@@ -88,7 +88,7 @@ class TestScrapeGithub(unittest.TestCase):
     def test_empty_html_returns_empty(self):
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url", return_value=""):
+        with patch("scrapers.github.fetch_url", return_value=""):
             articles = self.news_tool.scrape_github()
         self.assertEqual(articles, [])
 
@@ -97,7 +97,7 @@ class TestScrapeGithub(unittest.TestCase):
         GitHub trending has no machine-readable date per repo."""
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_url", return_value=self.GH_HTML):
+        with patch("scrapers.github.fetch_url", return_value=self.GH_HTML):
             articles = self.news_tool.scrape_github()
         self.assertTrue(all(a["published"].startswith("20") for a in articles),
                         f"expected ISO date, got {articles[0]['published']!r}")
@@ -152,7 +152,7 @@ class TestScrapeNewsapi(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("NEWS_API_KEY", None)
             fetch_called = []
-            with patch.object(self.news_tool, "fetch_json",
+            with patch("scrapers.newsapi.fetch_json",
                               side_effect=lambda *a, **kw: (fetch_called.append(1), None)[1]):
                 articles = self.news_tool.scrape_newsapi()
         self.assertEqual(articles, [])
@@ -163,7 +163,7 @@ class TestScrapeNewsapi(unittest.TestCase):
         """3 categories x 2 articles = 6 total, capped at 10 per cat."""
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_json", return_value=self.NEWSAPI_OK):
+        with patch("scrapers.newsapi.fetch_json", return_value=self.NEWSAPI_OK):
             articles = self.news_tool.scrape_newsapi()
         self.assertEqual(len(articles), 6)
         self.assertEqual(articles[0]["title"], "AI breakthrough announced")
@@ -176,7 +176,7 @@ class TestScrapeNewsapi(unittest.TestCase):
     def test_error_status_returns_empty(self):
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_json", return_value=self.NEWSAPI_ERROR):
+        with patch("scrapers.newsapi.fetch_json", return_value=self.NEWSAPI_ERROR):
             articles = self.news_tool.scrape_newsapi()
         self.assertEqual(articles, [],
                          "status:error response must not produce articles")
@@ -184,7 +184,7 @@ class TestScrapeNewsapi(unittest.TestCase):
     def test_falsy_response_returns_empty(self):
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_json", return_value=None):
+        with patch("scrapers.newsapi.fetch_json", return_value=None):
             articles = self.news_tool.scrape_newsapi()
         self.assertEqual(articles, [])
 
@@ -241,8 +241,8 @@ class TestScrapeFinance(unittest.TestCase):
         with the right field mapping and epoch->iso datetime conversion."""
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_json", return_value=self.FINNHUB_OK), \
-             patch.object(self.news_tool, "fetch_url", return_value=""):
+        with patch("scrapers.finance.fetch_json", return_value=self.FINNHUB_OK), \
+             patch("scrapers.finance.fetch_url", return_value=""):
             articles = self.news_tool.scrape_finance()
         self.assertGreaterEqual(len(articles), 2)
         a = articles[0]
@@ -260,8 +260,8 @@ class TestScrapeFinance(unittest.TestCase):
             self.skipTest("requests not available")
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("FINNHUB_API_KEY", None)
-            with patch.object(self.news_tool, "fetch_json", return_value=None), \
-                 patch.object(self.news_tool, "fetch_url", return_value=self.YAHOO_RSS):
+            with patch("scrapers.finance.fetch_json", return_value=None), \
+                 patch("scrapers.finance.fetch_url", return_value=self.YAHOO_RSS):
                 articles = self.news_tool.scrape_finance()
         self.assertGreaterEqual(len(articles), 1)
         self.assertEqual(articles[0]["title"], "S&P 500 hits new high")
@@ -269,8 +269,8 @@ class TestScrapeFinance(unittest.TestCase):
     def test_empty_finnhub_response_does_not_crash(self):
         if not self._requests_available:
             self.skipTest("requests not available")
-        with patch.object(self.news_tool, "fetch_json", return_value=[]), \
-             patch.object(self.news_tool, "fetch_url", return_value=""):
+        with patch("scrapers.finance.fetch_json", return_value=[]), \
+             patch("scrapers.finance.fetch_url", return_value=""):
             articles = self.news_tool.scrape_finance()
         self.assertEqual(articles, [])
 
@@ -280,8 +280,8 @@ class TestScrapeFinance(unittest.TestCase):
             self.skipTest("requests not available")
         zero_dt = [{"headline": "Zero time", "url": "https://x/0", "summary": "",
                     "datetime": 0, "source": "x"}]
-        with patch.object(self.news_tool, "fetch_json", return_value=zero_dt), \
-             patch.object(self.news_tool, "fetch_url", return_value=""):
+        with patch("scrapers.finance.fetch_json", return_value=zero_dt), \
+             patch("scrapers.finance.fetch_url", return_value=""):
             articles = self.news_tool.scrape_finance()
         self.assertEqual(len(articles), 1)
         self.assertTrue(articles[0]["published"].startswith("1970"),
