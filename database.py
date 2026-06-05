@@ -141,11 +141,15 @@ def _normalize_title_words(title):
             if w and w.lower().strip('.,!?;:()"\'') not in STOP_WORDS}
 
 
-def title_similarity(title1, title2):
+def title_similarity(title1, title2, pre_processed=False):
     if not title1 or not title2:
         return 0.0
-    words1 = _normalize_title_words(title1)
-    words2 = _normalize_title_words(title2)
+    if pre_processed:
+        words1 = set(title1.split())
+        words2 = set(title2.split())
+    else:
+        words1 = _normalize_title_words(title1)
+        words2 = _normalize_title_words(title2)
     if not words1 or not words2:
         return 0.0
     intersection = words1 & words2
@@ -188,8 +192,10 @@ def is_duplicate(title, url, summary='', conn=None):
             ORDER BY id DESC LIMIT 200
         """, like_params).fetchall()
         for row in rows:
-            existing = row['title_words'] or row['title']
-            sim = title_similarity(title_words, existing)
+            if row['title_words']:
+                sim = title_similarity(title_words, row['title_words'], pre_processed=True)
+            else:
+                sim = title_similarity(title, row['title'] or '')
             if sim >= 0.80:
                 return True, row['id'], sim, 'title_similarity'
         return False, None, 0.0, None
