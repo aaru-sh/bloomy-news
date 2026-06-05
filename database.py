@@ -7,6 +7,7 @@ import tempfile
 import threading
 import logging
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +17,16 @@ DB_PATH = BASE / "news.db"
 EMBEDDING_DIM = 384
 EMBEDDING_DTYPE = "float32"
 
-def get_connection():
+Article = Dict[str, Any]
+ArticleList = List[Article]
+
+def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
-def init_db():
+def init_db() -> None:
     conn = get_connection()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS articles (
@@ -117,7 +121,7 @@ def init_db():
 
     conn.close()
 
-def compute_hash(article):
+def compute_hash(article: Article) -> str:
     raw = (article.get('url', '') or '') + (article.get('title', '') or '')
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
@@ -126,28 +130,28 @@ STOP_WORDS = {'the','a','an','is','are','was','were','be','been','being',
               'should','may','might','shall','can','to','of','in','for',
               'on','with','at','by','from','as','new','also','says','said'}
 
-def extract_title_words(title):
-    words = set()
+def extract_title_words(title: str) -> str:
+    words: Set[str] = set()
     for w in title.split():
         w = w.lower().strip('.,!?;:()"\'')
         if w and w not in STOP_WORDS:
             words.add(w)
     return ' '.join(sorted(words))
 
-def parse_arxiv_id(url):
+def parse_arxiv_id(url: str) -> Optional[str]:
     match = re.search(r'(\d{4}\.\d{4,5})(?:v\d+)?', url or '')
     if match:
         return match.group(1)
     return None
 
-def _normalize_title_words(title):
+def _normalize_title_words(title: str) -> Set[str]:
     if not title:
         return set()
     return {w.lower().strip('.,!?;:()"\'') for w in title.split()
             if w and w.lower().strip('.,!?;:()"\'') not in STOP_WORDS}
 
 
-def title_similarity(title1, title2, pre_processed=False):
+def title_similarity(title1: str, title2: str, pre_processed: bool = False) -> float:
     if not title1 or not title2:
         return 0.0
     if pre_processed:
@@ -162,7 +166,7 @@ def title_similarity(title1, title2, pre_processed=False):
     union = words1 | words2
     return len(intersection) / len(union)
 
-def is_duplicate(title, url, summary='', conn=None):
+def is_duplicate(title: str, url: str, summary: str = '', conn: Optional[sqlite3.Connection] = None) -> Tuple[bool, Optional[int], float, Optional[str]]:
     """Check whether the given article is a duplicate of one already stored.
 
     If `conn` is provided, uses it (the caller manages the connection and
@@ -173,6 +177,7 @@ def is_duplicate(title, url, summary='', conn=None):
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
+    assert conn is not None
     try:
         if url:
             row = conn.execute("SELECT id FROM articles WHERE url = ?", (url,)).fetchone()
@@ -209,7 +214,7 @@ def is_duplicate(title, url, summary='', conn=None):
         if own_conn:
             conn.close()
 
-def log_duplicate(content_hash, title, similar_id, score, method, conn=None):
+def log_duplicate(content_hash: str, title: str, similar_id: Optional[int], score: float, method: Optional[str], conn: Optional[sqlite3.Connection] = None) -> None:
     """Record a duplicate-detection event in the dedup_log table.
 
     If `conn` is provided, uses it (caller manages commit/rollback).
@@ -220,6 +225,7 @@ def log_duplicate(content_hash, title, similar_id, score, method, conn=None):
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
+    assert conn is not None
     try:
         conn.execute("""
             INSERT INTO dedup_log (content_hash, title, similar_to_id, similarity_score, method)
@@ -231,7 +237,7 @@ def log_duplicate(content_hash, title, similar_id, score, method, conn=None):
         if own_conn:
             conn.close()
 
-def _serialize_embedding(embedding):
+def _serialize_embedding(embedding: Any) -> Optional[bytes]:
     """Convert a numpy array (or raw bytes/None) to a BLOB-storable value.
 
     Accepts a numpy ndarray (calls tobytes()), a bytes/bytearray (returned
@@ -248,7 +254,7 @@ def _serialize_embedding(embedding):
     )
 
 
-def store_article(article, conn=None, embedding=None):
+def store_article(article: Article, conn: Optional[sqlite3.Connection] = None, embedding: Any = None) -> Tuple[bool, Optional[int]]:
     """Insert an article if it's not a duplicate.
 
     If `conn` is provided, uses it (caller manages commit/rollback). The
@@ -267,6 +273,7 @@ def store_article(article, conn=None, embedding=None):
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
+    assert conn is not None
     try:
         title = article.get('title', '')
         url = article.get('url', '')
@@ -311,7 +318,7 @@ def store_article(article, conn=None, embedding=None):
             conn.close()
 
 
-def load_article_embedding(article_id, conn=None):
+def load_article_embedding(article_id: int, conn: Optional[sqlite3.Connection] = None) -> Any:
     """Reconstruct the numpy embedding vector stored for `article_id`.
 
     Returns the float32 array of shape (EMBEDDING_DIM,) on success, or
@@ -323,6 +330,7 @@ def load_article_embedding(article_id, conn=None):
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
+    assert conn is not None
     try:
         row = conn.execute(
             "SELECT embedding FROM articles WHERE id = ?", (article_id,)
@@ -342,7 +350,7 @@ def load_article_embedding(article_id, conn=None):
         if own_conn:
             conn.close()
 
-def _has_fts5_table(conn):
+def _has_fts5_table(conn: sqlite3.Connection) -> bool:
     """Return True if the articles_fts virtual table is configured.
 
     The check hits sqlite_master on the supplied connection so the result
@@ -357,7 +365,7 @@ def _has_fts5_table(conn):
         return False
 
 
-def _fts_search_ids(conn, query, limit=500):
+def _fts_search_ids(conn: sqlite3.Connection, query: str, limit: int = 500) -> Optional[List[int]]:
     """Run FTS5 search; return list of rowids, [] for no matches, or None on failure.
 
     Returns None to signal "FTS5 is not available, fall back to LIKE".
@@ -378,7 +386,7 @@ def _fts_search_ids(conn, query, limit=500):
         return None
 
 
-def _like_search_ids(conn, query, limit=500):
+def _like_search_ids(conn: sqlite3.Connection, query: str, limit: int = 500) -> List[int]:
     """LIKE-based fallback used when FTS5 is unavailable or the FTS5 query is invalid."""
     like = f"%{query}%"
     rows = conn.execute(
@@ -390,11 +398,11 @@ def _like_search_ids(conn, query, limit=500):
     return [r[0] for r in rows]
 
 
-def get_articles(category=None, source=None, date_from=None, date_to=None, search=None, is_read=None, limit=50, offset=0):
+def get_articles(category: Optional[str] = None, source: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, search: Optional[str] = None, is_read: Optional[bool] = None, limit: int = 50, offset: int = 0) -> ArticleList:
     conn = get_connection()
     try:
         conditions = []
-        params = []
+        params: List[Any] = []
         if category:
             conditions.append("a.category = ?")
             params.append(category)
@@ -438,7 +446,7 @@ def get_articles(category=None, source=None, date_from=None, date_to=None, searc
     finally:
         conn.close()
 
-def get_article_by_id(id):
+def get_article_by_id(id: int) -> Optional[Article]:
     conn = get_connection()
     try:
         row = conn.execute("SELECT * FROM articles WHERE id = ?", (id,)).fetchone()
@@ -446,7 +454,7 @@ def get_article_by_id(id):
     finally:
         conn.close()
 
-def mark_read(id):
+def mark_read(id: int) -> None:
     conn = get_connection()
     try:
         conn.execute("UPDATE articles SET is_read = 1 WHERE id = ?", (id,))
@@ -455,7 +463,7 @@ def mark_read(id):
         conn.close()
 
 
-def mark_read_batch(ids):
+def mark_read_batch(ids: List[int]) -> int:
     """Mark multiple articles as read in a single transaction.
 
     No-op for an empty list. Skips silently if any id is missing - safer
@@ -476,7 +484,7 @@ def mark_read_batch(ids):
         conn.close()
 
 
-def count_articles_today_by_category():
+def count_articles_today_by_category() -> Dict[str, int]:
     """Return {category: count} for articles published today (UTC)."""
     conn = get_connection()
     try:
@@ -493,7 +501,7 @@ def count_articles_today_by_category():
 BOOKMARKS_FILE = BASE / "dashboard" / "data" / "bookmarks.json"
 _BOOKMARKS_LOCK = threading.Lock()
 
-def get_bookmarks():
+def get_bookmarks() -> List[str]:
     """Get list of bookmarked article IDs.
 
     Tolerates both file shapes seen in the wild: a bare JSON list
@@ -513,7 +521,7 @@ def get_bookmarks():
         return data["bookmarks"]
     return []
 
-def toggle_bookmark(article_id):
+def toggle_bookmark(article_id: str) -> bool:
     """Toggle bookmark status. Returns True if now bookmarked.
 
     Atomic write: tempfile in the target directory + os.replace, serialized
@@ -542,7 +550,7 @@ def toggle_bookmark(article_id):
             raise
     return starred
 
-def get_stats():
+def get_stats() -> Dict[str, Any]:
     conn = get_connection()
     try:
         cats = conn.execute("SELECT category, COUNT(*) as cnt FROM articles GROUP BY category ORDER BY cnt DESC").fetchall()
@@ -558,7 +566,7 @@ def get_stats():
     finally:
         conn.close()
 
-def search_articles(query, limit=20):
+def search_articles(query: str, limit: int = 20) -> ArticleList:
     conn = get_connection()
     try:
         try:
@@ -582,7 +590,7 @@ def search_articles(query, limit=20):
     finally:
         conn.close()
 
-def get_today_top_per_category(limit_per_cat=3):
+def get_today_top_per_category(limit_per_cat: int = 3) -> Dict[str, ArticleList]:
     conn = get_connection()
     try:
         cats = conn.execute("SELECT DISTINCT category FROM articles WHERE category != ''").fetchall()
@@ -599,7 +607,7 @@ def get_today_top_per_category(limit_per_cat=3):
     finally:
         conn.close()
 
-def migrate_from_files():
+def migrate_from_files() -> Tuple[int, int]:
     import gzip
     conn = get_connection()
     try:
