@@ -5,7 +5,10 @@ import hashlib
 import re
 import tempfile
 import threading
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 BASE = Path(__file__).parent.resolve()
 DB_PATH = BASE / "news.db"
@@ -577,7 +580,8 @@ def migrate_from_files():
                             imported += 1
                         else:
                             skipped += 1
-                except:
+                except Exception as e:
+                    logger.warning("Migration skipped %s: %s", md_file, e)
                     continue
     print(f"Migration: {imported} imported, {skipped} skipped")
     return imported, skipped
