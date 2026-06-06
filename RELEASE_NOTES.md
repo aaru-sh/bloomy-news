@@ -1,7 +1,88 @@
 # Release notes — paste into the GitHub Release UI
 
 Copy everything below the line into the "Describe this release" box on
-https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.4.0
+https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.4.1
+
+---
+
+## Bloomy News v1.4.1 — Launcher fixes, storage cleanup, logging fix, and GitHub button
+
+A maintenance patch. **No behavior changes** to the
+pipeline, the classifier, the digest, or the data layer.
+The `scrapers/` split from v1.4.0 is unchanged. This
+release ships the runtime issues observed after the v1.4.0
+build, the 100 MB → 15 MB storage cleanup, the `serve.py`
+log redirect fix, log rotation, and a GitHub link in the
+dashboard header.
+
+### What's in this release
+
+- **Four launcher / dashboard fixes** — `LAUNCH_DAILY.bat`
+  BOM removed, server-start polling loop (10×1s), no-cache
+  headers now cover HTML / JS / CSS, and `pause` at the end
+  so the window doesn't appear "stuck".
+- **`serve.py` log redirect fix** — the `start /B python
+  ... > log 2>&1` redirect was broken on Windows: the
+  redirect went to `start`, not to the spawned python, so
+  `logs\server.log` was always 0 bytes even when the server
+  failed. `serve.py` now owns its own log file via
+  Python's `logging` + `RotatingFileHandler` (1 MB max,
+  1 generation kept).
+- **Log rotation** for `logs\pipeline_stdout.log` (1 MB
+  → `.1`, one generation kept) at the top of
+  `LAUNCH_DAILY.bat`.
+- **Storage cleanup** — `.mypy_cache/` (94.57 MB),
+  `__pycache__/`, `.playwright-mcp/`,
+  `dashboard-initial.png`, `logs\server_test*.log` removed.
+  Project is now **15.75 MB** total (was 107 MB).
+- **GitHub repo button** in the dashboard header on all
+  three pages, linking to
+  <https://github.com/aaru-sh/bloomy-news>.
+- **`.gitignore` update** to catch `dashboard-*.png` and
+  `*-initial.png` patterns.
+
+### Why the project grew from 11 MB to 107 MB
+
+v1.3.0 (one day before this release) added mypy to the dev
+toolchain. During v1.3.0's type-hint development, each
+`mypy news_tool.py database.py` run wrote a 4-8 MB cache
+file to `.mypy_cache/3.10/`. Over 15+ runs in one day,
+that grew to **94.57 MB** of type-check cache. The
+`.mypy_cache/` is in `.gitignore` (line 11) so it's not
+tracked, but it persists on disk. This release deletes it
+once; it will regrow over time and may need periodic
+cleanup until we add a scheduled cleanup task.
+
+### Verification
+
+- 103 tests pass, 1 skipped (the `TestRealWorldDistribution`
+  smoke test that needs a populated `news.db`)
+- Project storage: **15.75 MB** (was 107 MB before
+  cleanup)
+- BOMs verified gone on all touched files
+- `server.log` now populates on server start
+  (verified: `2026-06-06 14:26:25,907 [INFO]
+  bloomy_news.dashboard: Dashboard server starting on
+  http://127.0.0.1:8080`)
+
+### Upgrading
+
+No schema changes. No config changes. `git pull` and re-run
+`LAUNCH_DAILY.bat` — the next launch will:
+
+1. Show the system check output **without** the leading
+   `∩╗┐@echo off is not recognized` line.
+2. Wait up to 10 s for the dashboard server to bind (instead
+   of 2 s).
+3. Allow the dashboard to refetch HTML / JS / CSS on the
+   next page load (no hard refresh needed).
+4. Show "Press any key to close this window..." at the end
+   (the window will not close silently while you're reading
+   the output).
+5. Write a populated `logs\server.log` (visible as soon as
+   the server starts).
+6. Show the new GitHub icon link in the dashboard header,
+   between the existing nav links and the theme toggle.
 
 ---
 

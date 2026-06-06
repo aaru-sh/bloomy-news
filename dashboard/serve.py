@@ -1,12 +1,14 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """HTTP server with API endpoints for the Bloomy News dashboard."""
 import http.server
 import json
+import logging
 import os
 import sys
 import threading
 import re
 import tempfile
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -16,12 +18,38 @@ DASHBOARD_DIR = Path(__file__).parent
 DATA_DIR = DASHBOARD_DIR / 'data'
 DATA_FILE = DATA_DIR / 'dashboard_data.json'
 BOOKMARKS_FILE = DATA_DIR / 'bookmarks.json'
+LOG_FILE = DASHBOARD_DIR.parent / 'logs' / 'server.log'
 
 MAX_BODY_SIZE = 1024
 MAX_BOOKMARKS = 5000
 ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]{1,64}$')
 
 _bookmarks_lock = threading.Lock()
+logger = logging.getLogger('bloomy_news.dashboard')
+
+
+def setup_logging():
+    """Configure root logger to write to logs/server.log with size-based rotation.
+
+    Replaces the previous LAUNCH_DAILY.bat `start /B python ... > log 2>&1`
+    pattern, which was broken on Windows: cmd.exe's `>` redirect goes to
+    `start`, not to the spawned python process, so the log file was always
+    empty even when the server failed. Now serve.py owns its own log file
+    and rotates at 1 MB with one generation kept.
+    """
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+    file_handler = RotatingFileHandler(
+        LOG_FILE, maxBytes=1_000_000, backupCount=1, encoding='utf-8'
+    )
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+    ))
+    root.addHandler(file_handler)
+    root.addHandler(logging.StreamHandler(sys.stderr))
 
 
 def load_data():
@@ -30,7 +58,7 @@ def load_data():
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError) as e:
-            print(f"Warning: failed to load {DATA_FILE}: {e}", file=sys.stderr)
+            logger.warning("failed to load %s: %s", DATA_FILE, e)
     return {"generated": "", "stats": {}, "articles": []}
 
 
@@ -44,7 +72,7 @@ def load_bookmarks():
                 if isinstance(data, dict) and isinstance(data.get("bookmarks"), list):
                     return data
         except (json.JSONDecodeError, OSError) as e:
-            print(f"Warning: failed to load {BOOKMARKS_FILE}: {e}", file=sys.stderr)
+            logger.warning("failed to load %s: %s", BOOKMARKS_FILE, e)
     return {"bookmarks": []}
 
 
@@ -88,15 +116,17 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def end_headers(self):
-        """Force no-cache on dashboard data files so today's articles
-        appear immediately after a pipeline run. SimpleHTTPRequestHandler
-        doesn't set Cache-Control, so the browser caches the stale JSON
-        and the date filter (e.g. "click 5 June") returns 0 results even
-        when today's articles exist in the file."""
-        no_cache_paths = ('/data/dashboard_data.json', '/data/bookmarks.json')
-        if hasattr(self, 'path') and self.path.split('?')[0].rstrip('/') in no_cache_paths:
-            self.send_header('Cache-Control', 'no-store, must-revalidate')
-            self.send_header('Pragma', 'no-cache')
+        """Force no-cache on all non-API responses so the dashboard
+        (HTML / JS / CSS) refetches on every page load. Without this,
+        SimpleHTTPRequestHandler doesn't set Cache-Control on static
+        files and the browser caches stale HTML, requiring a hard
+        refresh after each pipeline run. API endpoints keep their
+        per-endpoint Cache-Control set by _send_json."""
+        if hasattr(self, 'path'):
+            path = urlparse(self.path).path.rstrip('/')
+            if not path.startswith('/api/'):
+                self.send_header('Cache-Control', 'no-store, must-revalidate')
+                self.send_header('Pragma', 'no-cache')
         super().end_headers()
 
     def do_POST(self):
@@ -192,11 +222,15 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == '__main__':
+    setup_logging()
     os.chdir(DASHBOARD_DIR)
-    print(f"Dashboard server: http://{HOST}:{PORT}")
+    logger.info("Dashboard server starting on http://%s:%d", HOST, PORT)
 
     with http.server.ThreadingHTTPServer((HOST, PORT), DashboardHandler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("\nStopped.")
+            logger.info("Dashboard server stopped by user")
+        except OSError as e:
+            logger.error("Dashboard server failed: %s", e)
+            raise

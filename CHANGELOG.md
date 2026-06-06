@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to Bloomy News are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -12,8 +12,131 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 - Configurable classifier training from user feedback
 - Tighten keyword lists to bring the keyword-only classifier back above the 0.80 gate (currently 63.3% on the regression set, surfaced by the 1.1.2 gate split)
 - `news_tool.py` split into `scrapers/` package + slim orchestrator (shipped in 1.4.0)
-- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2, deferred again from 1.2.0, deferred again from 1.3.0, deferred again from 1.4.0)
+- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2, deferred again from 1.2.0, deferred again from 1.3.0, deferred again from 1.4.0, deferred again from 1.4.1)
 - Test rewrite: `test_fresh_install.py` -> subprocess-based (required before bookmark persistence can land)
+
+---
+
+## [1.4.1] - 2026-06-06
+
+**Launcher fixes, storage cleanup, logging fix, and GitHub
+button.** A maintenance patch that ships the runtime issues
+observed after the v1.4.0 build, the 100 MB → 15 MB storage
+cleanup, and the GitHub link in the dashboard header. No
+behavior changes to the pipeline, the classifier, the
+digest, or the data layer. The `scrapers/` split from v1.4.0
+is unchanged.
+
+### Fixed
+
+- **`LAUNCH_DAILY.bat` UTF-8 BOM removed.** The file was
+  saved with a UTF-8 byte-order mark (`0xEF 0xBB 0xBF`)
+  which `cmd.exe` does not strip from `.bat` files. The BOM
+  was echoed as `∩╗┐` before `@echo off` and produced a
+  spurious `'∩╗┐@echo off' is not recognized as an internal
+  or external command, operable program or batch file`
+  message at every run. The BOM also caused `@echo off` to
+  be skipped, so every subsequent command was echoed to
+  the terminal. Re-saved as UTF-8 **without** BOM via
+  `UTF8Encoding($false)` in PowerShell.
+- **Server-start polling loop in `LAUNCH_DAILY.bat`.** The
+  original `timeout /t 2 /nobreak` then `netstat` check was
+  too eager on slow first runs and printed a misleading
+  `ERROR: Server failed to start` even when the server was
+  binding successfully within the next second. Replaced with
+  a 10-attempt polling loop (1 s between attempts) using
+  `setlocal EnableDelayedExpansion` and `!ATTEMPT!` for the
+  counter.
+- **`serve.py` no-cache headers now cover HTML / JS / CSS.**
+  `end_headers()` previously only added `Cache-Control:
+  no-store, must-revalidate` for `/data/dashboard_data.json`
+  and `/data/bookmarks.json`. The other static files
+  (`index.html`, `app.js`, `app-filters.js`,
+  `app-bookmarks.js`, `styles.css`) relied on
+  `SimpleHTTPRequestHandler`'s default header set, which
+  lets the browser cache them and force a hard refresh
+  after every pipeline run. The check is now "every
+  non-`/api/*` path gets no-cache". API endpoints keep
+  their per-endpoint `Cache-Control` set by `_send_json`.
+- **`LAUNCH_DAILY.bat` no longer "stuck" at the end.** The
+  previous script ended with `goto :eof`, which returned to
+  the parent `cmd.exe` and left the terminal window open
+  with no further output. Now `pause >nul` runs before
+  `goto :eof` (success path) and before `exit /b 1` (error
+  path).
+- **`serve.py` log redirect bug fixed.** The launcher's
+  `start /B python ... > log 2>&1` was broken on Windows:
+  cmd.exe's `>` redirect goes to `start`, not to the
+  spawned python process, so `logs\server.log` was always
+  0 bytes even when the server failed. `serve.py` now owns
+  its own log file via Python's `logging` module and a
+  `RotatingFileHandler` (1 MB max, 1 generation kept),
+  written to `logs/server.log`. The launcher no longer
+  redirects server output — just `start "" /B python -u
+  dashboard\serve.py`.
+- **Log rotation for `logs\pipeline_stdout.log`.** The
+  pipeline run captures stdout/stderr to this log. A
+  size-based rotation block at the top of
+  `LAUNCH_DAILY.bat` rotates the log when it exceeds 1 MB
+  (one generation kept as `.1`).
+
+### Storage cleanup
+
+- **`.mypy_cache/` removed** (94.57 MB → 0). The mypy
+  incremental cache was 16 files of 4-8 MB each. v1.3.0
+  added mypy to the dev toolchain and each `mypy
+  news_tool.py database.py` run wrote one cache file;
+  the cache grew to 94 MB over a single day of type-hint
+  development. Already in `.gitignore` (line 11) so
+  deletion is safe; regenerates on next mypy run.
+- **`__pycache__/`, `.playwright-mcp/`,
+  `dashboard-initial.png`, `logs\server_test*.log`
+  removed** (~0.4 MB). All already in `.gitignore` or
+  untracked.
+- **`.gitignore` updated** to catch `dashboard-*.png` and
+  `*-initial.png` patterns in the project root, so future
+  debug screenshots don't sneak into the working tree.
+
+After cleanup, the project is **15.75 MB** total (was
+107 MB), and the git-tracked portion is unchanged.
+
+### Added
+
+- **GitHub repo button in the dashboard header.** Added
+  to `index.html`, `filters.html`, and `bookmarks.html`
+  between the existing nav links and the theme toggle.
+  Styled with the existing `.nav-link` class for
+  consistency, with the GitHub octocat SVG (14×14, current
+  color), `target="_blank"`, `rel="noopener noreferrer"`,
+  and `title="View source on GitHub"` for accessibility.
+  Link target: <https://github.com/aaru-sh/bloomy-news>.
+
+### What was deferred
+
+- **Bookmark persistence** — still deferred to v1.5.0.
+- **Test rewrite for `TestFreshInstallFlow`** — still
+  required before bookmark persistence can land.
+- **`dashboard_data.json` gzip compression** — the JSON
+  is 4.58 MB (6726 articles). Compression would save ~3
+  MB but requires `serve.py` to decompress on every
+  `/api/articles` request, which adds startup and
+  per-request CPU cost for a localhost dashboard that
+  reads the file directly. Tracked for a future release.
+
+### Verification
+
+- 103 tests pass, 1 skipped (the real-world distribution
+  smoke test that needs a populated `news.db`)
+- Project storage: **15.75 MB** (was 107 MB before
+  cleanup)
+- BOMs verified gone on all touched files
+  (`LAUNCH_DAILY.bat` first 3 bytes: `0x40 0x65 0x63`
+  = `@ec`; `dashboard/serve.py` first 3 bytes: `0x23
+  0x21 0x2F` = `#!/`; HTML files: `0x3C 0x21 0x44` =
+  `<!D`)
+- `server.log` now populates on server start (verified
+  via `Start-Process python -u dashboard\serve.py`,
+  logs `Dashboard server starting on http://127.0.0.1:8080`)
 
 ---
 

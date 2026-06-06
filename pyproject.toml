@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bloomy-news"
-version = "1.4.0"
+version = "1.4.1"
 description = "Self-hosted AI/ML/finance/cybersecurity news aggregator with a local dashboard and Telegram digest."
 readme = "README.md"
 license = {text = "MIT"}

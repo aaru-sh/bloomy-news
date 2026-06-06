@@ -73,3 +73,5 @@ prompts/
 
 # Debug screenshots
 dashboard/issue-*.png
+dashboard-*.png
+*-initial.png
