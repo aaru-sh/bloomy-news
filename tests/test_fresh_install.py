@@ -8,12 +8,15 @@ no .last_run) the system can:
   4. Serve a valid /api/articles response (empty articles list) from serve.py.
   5. Reject invalid bookmark IDs.
 
-The test does NOT delete the real news.db. It uses a copy-on-write
-strategy where it patches Path attributes of imported modules to point
-at a temporary directory, then asserts the side effects landed there.
+The TestFreshInstallFlow cases run in a subprocess so the real `database`
+module is never imported into the test's process. Previously these tests
+copied modules into a temp dir and used importlib to load them, which
+polluted `sys.modules` for the rest of the suite (e.g. TestServerSmoke
+would see a database module bound to the wrong DB_PATH).
 """
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -22,11 +25,34 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE / "dashboard"))
+
+
+def _run_in_subprocess(root: Path, script: str) -> str:
+    """Run a Python snippet in a fresh interpreter with `root` on sys.path
+    AND as CWD, so relative `sqlite3.connect('news.db')` opens the temp DB
+    and not the test runner's project-root DB.
+    """
+    full = (
+        f"import sys, os; sys.path.insert(0, r'{root.as_posix()}'); "
+        f"os.chdir(r'{root.as_posix()}')\n" + script
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", full],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise AssertionError(
+            f"subprocess failed (exit {result.returncode}):\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
+    return result.stdout + result.stderr
 
 
 class TestPathResolution(unittest.TestCase):
@@ -38,9 +64,7 @@ class TestPathResolution(unittest.TestCase):
     def test_database_paths_derive_from_module(self):
         import database
         root = self._project_root()
-        # DB_PATH must be <project_root>/news.db (derived from Path(__file__).parent)
         self.assertEqual(database.DB_PATH, root / "news.db")
-        # BOOKMARKS_FILE must be <project_root>/dashboard/data/bookmarks.json
         self.assertEqual(
             database.BOOKMARKS_FILE,
             root / "dashboard" / "data" / "bookmarks.json"
@@ -50,8 +74,6 @@ class TestPathResolution(unittest.TestCase):
         import scripts.telegram_bot as telegram_bot
         root = self._project_root()
         self.assertEqual(telegram_bot.BASE, root)
-        # The refactored telegram_bot imports database.DB_PATH instead of
-        # declaring its own — verify it agrees with the database module.
         import database
         self.assertEqual(database.DB_PATH, root / "news.db")
 
@@ -76,49 +98,46 @@ class TestPathResolution(unittest.TestCase):
 
 
 class TestFreshInstallFlow(unittest.TestCase):
-    """End-to-end smoke test: simulate a clean checkout in a temp dir."""
+    """End-to-end smoke test: simulate a clean checkout in a temp dir.
+
+    Each test runs in a subprocess so the parent test process's
+    sys.modules stays clean. This is the fix for the historical
+    TestFreshInstallFlow sys.modules pollution that blocked v1.5.0
+    work on the in-memory bookmark store.
+    """
 
     def setUp(self):
-        # Create an isolated temp project layout
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
 
-        # Mirror the minimum needed to exercise the pipeline
         for sub in ("config", "logs", "dashboard", "dashboard/data",
-                    "scripts", "scripts", "tests"):
+                    "scripts", "tests"):
             (self.root / sub).mkdir(parents=True, exist_ok=True)
-        # Copy config files (they use ${VAR} placeholders, no secrets)
-        (self.root / "config" / "categories.json").write_text(
-            (BASE / "config" / "categories.json").read_text(encoding="utf-8"),
-            encoding="utf-8"
-        )
-        (self.root / "config" / "sources.json").write_text(
-            (BASE / "config" / "sources.json").read_text(encoding="utf-8"),
-            encoding="utf-8"
-        )
-        (self.root / "config" / "telegram.json").write_text(
-            (BASE / "config" / "telegram.json").read_text(encoding="utf-8"),
-            encoding="utf-8"
-        )
-        # Copy required .py files
+
+        for cfg in ("categories.json", "sources.json", "telegram.json"):
+            (self.root / "config" / cfg).write_text(
+                (BASE / "config" / cfg).read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
         for src in ("database.py", "config.py", "news_tool.py"):
             (self.root / src).write_text(
                 (BASE / src).read_text(encoding="utf-8"), encoding="utf-8"
             )
-        # Copy dashboard
+
         (self.root / "dashboard" / "generate_data.py").write_text(
             (BASE / "dashboard" / "generate_data.py").read_text(encoding="utf-8"),
-            encoding="utf-8"
+            encoding="utf-8",
         )
         (self.root / "dashboard" / "serve.py").write_text(
             (BASE / "dashboard" / "serve.py").read_text(encoding="utf-8"),
-            encoding="utf-8"
+            encoding="utf-8",
         )
-        # Copy scripts
+
         for src in ("scheduler.py", "check_system.py", "telegram_bot.py"):
             (self.root / "scripts" / src).write_text(
                 (BASE / "scripts" / src).read_text(encoding="utf-8"),
-                encoding="utf-8"
+                encoding="utf-8",
             )
 
     def tearDown(self):
@@ -126,101 +145,61 @@ class TestFreshInstallFlow(unittest.TestCase):
 
     def test_init_db_creates_db_at_project_root(self):
         """importing database and calling init_db() should create news.db inside the project root."""
-        sys.path.insert(0, str(self.root))
-        # Force reimport under the new sys.path
-        for mod in list(sys.modules):
-            if mod in ("database", "config", "news_tool", "serve",
-                       "generate_data", "scripts.telegram_bot",
-                       "scripts.scheduler", "scripts.check_system"):
-                del sys.modules[mod]
-
-        import database
-        # On the fresh checkout, the DB does not exist yet
         self.assertFalse((self.root / "news.db").exists())
-
-        database.init_db()
-
-        # Now it should exist with the articles table
-        self.assertTrue((self.root / "news.db").exists())
-        import sqlite3
-        conn = sqlite3.connect(str(self.root / "news.db"))
-        try:
-            cur = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='articles'"
-            )
-            self.assertIsNotNone(cur.fetchone())
-        finally:
-            conn.close()
+        _run_in_subprocess(self.root, """
+import database
+database.init_db()
+import os, sqlite3
+assert os.path.exists('news.db'), 'no db'
+conn = sqlite3.connect('news.db')
+row = conn.execute(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='articles'"
+).fetchone()
+assert row is not None, 'no articles table'
+# v1.4.2: verify the new bookmarked column is created
+cols = [r[1] for r in conn.execute('PRAGMA table_info(articles)').fetchall()]
+assert 'bookmarked' in cols, f'no bookmarked column; have {cols}'
+conn.close()
+""")
 
     def test_serve_api_handles_missing_data_file(self):
         """serve.py must return valid JSON when dashboard_data.json is missing."""
-        sys.path.insert(0, str(self.root))
-        for mod in list(sys.modules):
-            if mod in ("database", "config", "news_tool", "serve",
-                       "generate_data", "scripts.telegram_bot",
-                       "scripts.scheduler", "scripts.check_system"):
-                del sys.modules[mod]
-        # IMPORTANT: also clear __pycache__ from the tmp dir so the import
-        # picks up the freshly-copied serve.py.
-        import importlib
-        spec = importlib.util.spec_from_file_location(
-            "serve", self.root / "dashboard" / "serve.py"
-        )
-        serve = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(serve)
-
-        # Patch serve to point at the temp data dir
-        serve.DATA_FILE = self.root / "dashboard" / "data" / "dashboard_data.json"
-        serve.BOOKMARKS_FILE = self.root / "dashboard" / "data" / "bookmarks.json"
-
-        # Data file is missing on purpose
-        self.assertFalse(serve.DATA_FILE.exists())
-
-        # load_data() must return a safe empty payload
-        payload = serve.load_data()
-        self.assertIn("articles", payload)
-        self.assertEqual(payload["articles"], [])
-
-        # load_bookmarks() must return a safe empty payload
-        bookmarks = serve.load_bookmarks()
-        self.assertEqual(bookmarks, {"bookmarks": []})
+        tmp_data = self.root / "dashboard" / "data"
+        _run_in_subprocess(self.root, f"""
+import importlib.util
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('serve', r'{(self.root / 'dashboard' / 'serve.py').as_posix()}')
+serve = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(serve)
+serve.DATA_FILE = Path(r'{tmp_data.as_posix()}/dashboard_data.json')
+serve.BOOKMARKS_FILE = Path(r'{tmp_data.as_posix()}/bookmarks.json')
+payload = serve.load_data()
+assert 'articles' in payload, f'no articles key in {{payload}}'
+assert payload['articles'] == [], f'expected empty list, got {{payload["articles"]}}'
+bookmarks = serve.load_bookmarks()
+assert bookmarks == {{'bookmarks': []}}, f'expected empty bookmarks, got {{bookmarks}}'
+""")
 
     def test_generate_data_creates_file_on_empty_db(self):
         """generate_data.build_dashboard_data() must not crash on an empty DB."""
-        sys.path.insert(0, str(self.root))
-        for mod in list(sys.modules):
-            if mod == "generate_data":
-                del sys.modules[mod]
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "generate_data", self.root / "dashboard" / "generate_data.py"
-        )
-        gd = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(gd)
-        # generate_data imports `database` (or directly reads news.db) - patch BASE
-        gd.BASE = self.root
-
-        # If generate_data uses the database module, init it first
-        try:
-            import database
-            database.init_db()
-        except Exception:
-            # generate_data may not need database module - that's fine
-            pass
-
-        try:
-            data = gd.build_dashboard_data()
-        except Exception as e:
-            self.fail(f"build_dashboard_data() crashed on empty DB: {e}")
-
-        self.assertIn("articles", data)
-        self.assertIn("stats", data)
-        # The test only requires that it doesn't crash and returns a
-        # well-formed payload - it may legitimately find historical
-        # articles from the real news.db (which is the global `database`
-        # module's source) when not fully isolated.
-        self.assertIsInstance(data["articles"], list)
-        self.assertIsInstance(data["stats"], dict)
+        _run_in_subprocess(self.root, f"""
+import importlib.util
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('generate_data', r'{(self.root / 'dashboard' / 'generate_data.py').as_posix()}')
+gd = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gd)
+gd.BASE = Path(r'{self.root.as_posix()}')
+try:
+    import database
+    database.init_db()
+except Exception:
+    pass
+data = gd.build_dashboard_data()
+assert 'articles' in data, f'no articles key in {{data}}'
+assert 'stats' in data, f'no stats key in {{data}}'
+assert isinstance(data['articles'], list)
+assert isinstance(data['stats'], dict)
+""")
 
 
 class TestServerSmoke(unittest.TestCase):
@@ -229,22 +208,21 @@ class TestServerSmoke(unittest.TestCase):
     def setUp(self):
         import serve
         self.serve = serve
-        # Find a free port by binding to port 0
+        self._db_mock_patcher = patch.object(serve, 'database', MagicMock())
+        self._db_mock_patcher.start()
+
         import socket
         s = socket.socket()
         s.bind(("127.0.0.1", 0))
         self.port = s.getsockname()[1]
         s.close()
 
-        # Point serve at a temp data dir so we don't pollute the real one.
-        # Patch DATA_DIR (parent of both files) so atomic-rename uses one drive.
         self.tmp = tempfile.TemporaryDirectory()
         self.tmp_data = Path(self.tmp.name)
         self.serve.DATA_DIR = self.tmp_data
         self.serve.DATA_FILE = self.tmp_data / "dashboard_data.json"
         self.serve.BOOKMARKS_FILE = self.tmp_data / "bookmarks.json"
 
-        # Start the server
         from http.server import ThreadingHTTPServer
         self.httpd = ThreadingHTTPServer(("127.0.0.1", self.port), self.serve.DashboardHandler)
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -255,6 +233,7 @@ class TestServerSmoke(unittest.TestCase):
         self.httpd.shutdown()
         self.httpd.server_close()
         self.tmp.cleanup()
+        self._db_mock_patcher.stop()
 
     def _get(self, path):
         url = f"http://127.0.0.1:{self.port}{path}"
@@ -294,10 +273,24 @@ class TestServerSmoke(unittest.TestCase):
         self.assertFalse(payload["starred"])
         self.assertNotIn("abc123", payload["bookmarks"])
 
+    def test_bookmark_toggle_mirrors_to_db(self):
+        """v1.4.2: toggling a bookmark must also call set_bookmarked_by_hash_prefix."""
+        self._post("/api/bookmarks/toggle", {"id": "deadbeefcafe1234"})
+        self.serve.database.set_bookmarked_by_hash_prefix.assert_called_with(
+            "deadbeefcafe1234", True,
+        )
+
+        self._post("/api/bookmarks/toggle", {"id": "deadbeefcafe1234"})
+        self.serve.database.set_bookmarked_by_hash_prefix.assert_called_with(
+            "deadbeefcafe1234", False,
+        )
+
     def test_bookmark_id_rejected(self):
         status, payload = self._post("/api/bookmarks/toggle", {"id": "has spaces!"})
         self.assertEqual(status, 400)
         self.assertIn("error", payload)
+        # v1.4.2: an invalid id must not reach the DB mirror
+        self.serve.database.set_bookmarked_by_hash_prefix.assert_not_called()
 
 
 if __name__ == "__main__":

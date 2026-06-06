@@ -45,6 +45,7 @@ def init_db() -> None:
             categories TEXT DEFAULT '[]',
             confidence REAL DEFAULT 0.0,
             is_read INTEGER DEFAULT 0,
+            bookmarked INTEGER NOT NULL DEFAULT 0,
             embedding BLOB,
             created_at TEXT DEFAULT (datetime('now'))
         );
@@ -59,15 +60,27 @@ def init_db() -> None:
             created_at TEXT DEFAULT (datetime('now'))
         );
 
-        CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category);
-        CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published);
-        CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source);
-        CREATE INDEX IF NOT EXISTS idx_articles_content_hash ON articles(content_hash);
-        CREATE INDEX IF NOT EXISTS idx_articles_arxiv_id ON articles(arxiv_id);
-        CREATE INDEX IF NOT EXISTS idx_articles_is_read ON articles(is_read);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_url_unique ON articles(url) WHERE url IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category);
+    CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published);
+    CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source);
+    CREATE INDEX IF NOT EXISTS idx_articles_content_hash ON articles(content_hash);
+    CREATE INDEX IF NOT EXISTS idx_articles_arxiv_id ON articles(arxiv_id);
+    CREATE INDEX IF NOT EXISTS idx_articles_is_read ON articles(is_read);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_url_unique ON articles(url) WHERE url IS NOT NULL;
     """)
     conn.commit()
+
+    try:
+        conn.execute("ALTER TABLE articles ADD COLUMN bookmarked INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass
+
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_bookmarked ON articles(bookmarked)")
+        conn.commit()
+    except Exception:
+        pass
 
     try:
         conn.execute("""
@@ -480,6 +493,71 @@ def mark_read_batch(ids: List[int]) -> int:
         )
         conn.commit()
         return cur.rowcount
+    finally:
+        conn.close()
+
+
+def set_bookmarked(article_id: int, value: bool) -> None:
+    """Set the bookmarked column for a single article by integer id.
+
+    New articles default to 0; this function is the only writer for the
+    column once the row exists. No-op if the id is unknown.
+    """
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE articles SET bookmarked = ? WHERE id = ?",
+            (1 if value else 0, article_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def is_bookmarked(article_id: int) -> bool:
+    """Return True if the article is currently bookmarked.
+
+    Unknown ids return False (the default value of the column).
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT bookmarked FROM articles WHERE id = ?", (article_id,)
+        ).fetchone()
+        return bool(row["bookmarked"]) if row else False
+    finally:
+        conn.close()
+
+
+def set_bookmarked_by_hash_prefix(prefix: str, value: bool) -> bool:
+    """Mirror a JSON bookmark toggle to the articles table.
+
+    The dashboard's article id is the first 16 hex chars of the SHA-256
+    of `url + title` (see generate_data.compute_hash). serve.py uses this
+    prefix to identify articles; the DB stores the full content_hash.
+    Returns True if a row was updated, False if no article matched the
+    prefix (e.g. historical articles not yet in the DB).
+    """
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "UPDATE articles SET bookmarked = ? WHERE substr(content_hash, 1, 16) = ?",
+            (1 if value else 0, prefix),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def get_bookmarked_article_ids() -> List[int]:
+    """Return the integer ids of all currently-bookmarked articles."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id FROM articles WHERE bookmarked = 1"
+        ).fetchall()
+        return [r["id"] for r in rows]
     finally:
         conn.close()
 

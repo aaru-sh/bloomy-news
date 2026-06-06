@@ -1,7 +1,96 @@
 # Release notes — paste into the GitHub Release UI
 
 Copy everything below the line into the "Describe this release" box on
-https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.4.1
+https://github.com/aaru-sh/bloomy-news/releases/new?tag=v1.4.2
+
+---
+
+## Bloomy News v1.4.2 — Bookmark persistence in SQLite
+
+A sub-release of the 1.4 line. The JSON bookmark store is now
+mirrored to a new `bookmarked` column in the `articles` table,
+so the bookmark state survives a clean rebuild of
+`dashboard_data.json`. The blocker that prevented this from
+shipping — `TestFreshInstallFlow`'s `sys.modules` pollution —
+is fixed in the same release.
+
+### What's in this release
+
+- **`bookmarked` column on the `articles` table.**
+  `INTEGER NOT NULL DEFAULT 0` with a matching
+  `idx_articles_bookmarked` index. Added to the
+  `CREATE TABLE` schema for new DBs and via
+  `ALTER TABLE ... ADD COLUMN` for existing DBs (inside a
+  `try/except` so re-runs are safe).
+- **Four new database helpers.**
+  `set_bookmarked(article_id, value)`,
+  `is_bookmarked(article_id)`,
+  `set_bookmarked_by_hash_prefix(prefix, value)` (the
+  dashboard's article id is the first 16 hex chars of the
+  SHA-256 of `url + title`), and
+  `get_bookmarked_article_ids()`.
+- **serve.py mirrors every toggle to the DB.** Best-effort:
+  a DB failure is logged but the user-facing JSON response
+  still returns 200, because the JSON is the source of truth
+  for what the user sees.
+- **`TestFreshInstallFlow` runs in a subprocess.** A small
+  `_run_in_subprocess` helper takes a temp dir + a Python
+  script, spawns a fresh interpreter, and surfaces the
+  script's stdout/stderr on failure. The `importlib`-
+  based import dance is gone; the test no longer touches
+  the real test process's `sys.modules`. This was the
+  blocker that kept bookmark persistence deferred from
+  1.1.0 onward.
+- **`TestServerSmoke` mocks `serve.database`.** The new
+  mirror would otherwise write to the real `news.db` on
+  every toggle during tests; the mock prevents that and
+  lets the new `test_bookmark_toggle_mirrors_to_db` test
+  assert the call args.
+- **8 new tests in `test_database_bookmark.py`.** Cover
+  the column creation, the ALTER TABLE migration, the
+  round-trip of set/is, the hash-prefix lookup, the
+  default value for new articles, and the unknown-id
+  no-op.
+
+### Verification
+
+- **112 tests pass**, 1 skipped (the
+  `TestRealWorldDistribution` smoke test that needs a
+  populated `news.db`); up from 103 in v1.4.1
+- mypy clean across `news_tool.py` and `database.py`
+- Live DB migration verified: the `ALTER TABLE` adds the
+  `bookmarked` column to the existing `news.db` without
+  error; `PRAGMA table_info(articles)` confirms the new
+  column and its `NOT NULL DEFAULT 0` constraint
+- `serve.database.set_bookmarked_by_hash_prefix` is invoked
+  on every successful toggle and never on a 400 (asserted
+  in `test_bookmark_id_rejected`)
+
+### Why a sub-version of 1.4 (not 1.5)
+
+- The change is small and focused (one column, four
+  helpers, one mirror call, one test rewrite, one new
+  test file). It does not justify a feature-level bump.
+- It is not purely a bug fix either — the column is new
+  schema — but the scope matches 1.4.0 and 1.4.1.
+- Bookmark persistence has been deferred from v1.1.0
+  onward; this release finally unblocks it without
+  claiming a new feature number.
+
+### Upgrading
+
+No JSON changes (the bookmark file format is unchanged).
+No new dependencies. `git pull` and re-run
+`LAUNCH_DAILY.bat`:
+
+1. `init_db()` will ALTER TABLE to add the `bookmarked`
+   column to any pre-existing `news.db`.
+2. From the next bookmark toggle, the DB column tracks
+   the JSON. The JSON is still the source of truth for
+   the user-facing view; the DB column is a second copy
+   that survives `dashboard_data.json` rebuilds.
+3. New articles default to `bookmarked = 0` and stay
+   that way until you click the star.
 
 ---
 

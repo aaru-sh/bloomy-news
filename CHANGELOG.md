@@ -12,8 +12,92 @@ All notable changes to Bloomy News are documented in this file. The format is ba
 - Configurable classifier training from user feedback
 - Tighten keyword lists to bring the keyword-only classifier back above the 0.80 gate (currently 63.3% on the regression set, surfaced by the 1.1.2 gate split)
 - `news_tool.py` split into `scrapers/` package + slim orchestrator (shipped in 1.4.0)
-- Bookmark persistence: mirror JSON to articles table (deferred from 1.1.0, deferred again from 1.1.1, deferred again from 1.1.2, deferred again from 1.2.0, deferred again from 1.3.0, deferred again from 1.4.0, deferred again from 1.4.1)
-- Test rewrite: `test_fresh_install.py` -> subprocess-based (required before bookmark persistence can land)
+- Bookmark persistence: mirror JSON to articles table (shipped in 1.4.2)
+- Test rewrite: `test_fresh_install.py` -> subprocess-based (shipped in 1.4.2)
+
+---
+
+## [1.4.2] - 2026-06-06
+
+**Bookmark persistence in the SQLite database.** A sub-release
+of the 1.4 line. The JSON bookmark store is now mirrored to a
+new `bookmarked` column in the `articles` table, so the
+bookmark state survives a clean rebuild of `dashboard_data.json`.
+The blocker that prevented this — `TestFreshInstallFlow`'s
+`sys.modules` pollution — is fixed in the same release: that
+test now runs in a subprocess.
+
+### Added
+- **`bookmarked INTEGER NOT NULL DEFAULT 0`** column on
+  `articles`, with a matching `idx_articles_bookmarked` index
+  and an `ALTER TABLE` migration for existing DBs (added inside
+  the same `try/except` pattern as the `is_read` and `title_words`
+  backfills). The column is added to the `CREATE TABLE` schema
+  for new DBs and to the post-create migration for pre-existing
+  DBs that predate the column.
+- **`database.set_bookmarked(article_id, value)`** — set the
+  bookmark flag for a single article by integer id.
+- **`database.is_bookmarked(article_id)`** — read the flag
+  (unknown ids return False, matching the column default).
+- **`database.set_bookmarked_by_hash_prefix(prefix, value)`** —
+  mirror a JSON toggle to the DB by the 16-char hex prefix the
+  dashboard uses as the article id. Returns True on match, False
+  on no match. This is the entry point serve.py uses.
+- **`database.get_bookmarked_article_ids()`** — list of integer
+  ids currently bookmarked (handy for batch operations later).
+
+### Changed
+- **`dashboard/serve.py` mirrors every bookmark toggle to the
+  articles table.** Best-effort: a DB failure is logged but the
+  JSON response still returns 200 (the JSON is the source of
+  truth for the user-facing view). Adds an `import database`
+  at the top with the project root inserted into `sys.path`
+  so the import works regardless of the current working
+  directory.
+- **`tests/test_fresh_install.py::TestFreshInstallFlow` now
+  runs in a subprocess.** A small helper `_run_in_subprocess`
+  takes a temp dir + a Python script, spawns a fresh interpreter
+  with `sys.path[0]` and CWD pointing at the temp dir, and
+  surfaces the script's stdout/stderr on failure. The
+  `importlib`-based import dance is gone; the test no longer
+  touches the real test process's `sys.modules`, which was
+  blocking the bookmark-persistence work.
+- **`tests/test_fresh_install.py::TestServerSmoke` mocks
+  `serve.database`.** The new mirror in serve.py means
+  `TestServerSmoke` would otherwise write to the real `news.db`
+  on every toggle. The test now patches `serve.database` to a
+  `MagicMock` in `setUp` and asserts the mock was called with
+  the right args.
+- **`tests/test_fresh_install.py` adds
+  `test_bookmark_toggle_mirrors_to_db`** and updates
+  `test_bookmark_id_rejected` to assert that the mirror is NOT
+  called for a 400.
+
+### Added (tests)
+- **`tests/test_database_bookmark.py`** — 8 new tests covering
+  the column creation, the ALTER TABLE migration, the
+  round-trip of set/is, the hash-prefix lookup, the default
+  value for new articles, and the unknown-id no-op.
+
+### Verification
+- 112 tests pass (1 skipped — the `TestRealWorldDistribution`
+  smoke test that needs a populated `news.db`), up from 103
+- mypy clean across `news_tool.py` and `database.py`
+- Live DB migration verified: `ALTER TABLE articles ADD COLUMN
+  bookmarked INTEGER NOT NULL DEFAULT 0` adds the column
+  without error on the existing `news.db`
+- `serve.database.set_bookmarked_by_hash_prefix` is invoked
+  on every successful toggle and never on a 400
+
+### Why a sub-version of 1.4 (not 1.5)
+- The change is small and focused (one column, four helper
+  functions, one mirror call, one test rewrite, one new test
+  file). It does not justify a feature-level bump to 1.5.
+- It is not purely a bug fix either — the column is new
+  schema — but it is the same scope as 1.4.0 and 1.4.1
+  (bookmark persistence has been deferred from 1.1.0 onward;
+  the 1.4.2 release finally unblocks it without claiming a
+  new feature number).
 
 ---
 

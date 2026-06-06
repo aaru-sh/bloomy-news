@@ -12,6 +12,13 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
+# Make the project root importable so we can reach the `database` module
+# (which lives next to news_tool.py at the repo root, not inside dashboard/).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+import database  # noqa: E402
+
 PORT = 8080
 HOST = '127.0.0.1'
 DASHBOARD_DIR = Path(__file__).parent
@@ -185,6 +192,11 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             except OSError as e:
                 self._send_json({"error": f"Failed to save: {e}"}, 500)
                 return
+
+        try:
+            database.set_bookmarked_by_hash_prefix(article_id, starred)
+        except Exception as e:
+            logger.warning("Failed to mirror bookmark %s to DB: %s", article_id, e)
 
         self._send_json({"starred": starred, "bookmarks": bm_list}, cache_max_age=0)
 
