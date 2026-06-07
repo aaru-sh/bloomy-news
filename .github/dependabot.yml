@@ -1,27 +1,30 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
-    directory: "/"
+  - package-ecosystem: pip
+    directory: /
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 5
+      interval: weekly
+    open-pull-requests-limit: 10
     labels:
-      - "dependencies"
-      - "automated"
+      - dependencies
+      - automated
     commit-message:
-      prefix: "deps"
-      prefix-development: "deps(dev)"
-      include: "scope"
+      prefix: "chore(deps):"
     groups:
-      production-dependencies:
-        dependency-type: "production"
-      development-dependencies:
-        dependency-type: "development"
-    ignore:
-      # requests is intentionally pinned loosely; ignore major bumps
-      # until a manual test pass.
-      - dependency-name: "requests"
-        update-types: ["version-update:semver-major"]
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    allow:
+      - dependency-type: direct
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - automated
+    commit-message:
+      prefix: "chore(deps):"

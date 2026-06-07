@@ -1,0 +1,39 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Thanks for asking!** Before posting, please check existing discussions and the [README](../../blob/main/README.md) to see if your question has already been answered.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: Describe what you need help with.
+      placeholder: e.g. "How do I add a custom scraper?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Paste the output of:
+        ```
+        python --version
+        pip show news-aggregator (or relevant package name)
+        OS
+        ```
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, or anything else that might help.
+    validations:
+      required: false

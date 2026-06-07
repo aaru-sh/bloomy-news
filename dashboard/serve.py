@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """HTTP server with API endpoints for the Bloomy News dashboard."""
+import gzip
+import hashlib
 import http.server
 import json
 import logging
@@ -8,6 +10,7 @@ import sys
 import threading
 import re
 import tempfile
+from io import BytesIO
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlparse
@@ -207,17 +210,48 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
 
     def _send_json(self, data, code=200, cache_max_age=None):
         content = json.dumps(data, ensure_ascii=False).encode('utf-8')
+
+        # Compute ETag from body content for conditional responses
+        etag = hashlib.sha256(content).hexdigest()[:16]
+        etag_value = f'"{etag}"'
+
+        # Check If-None-Match: return 304 if ETag matches
+        if self.headers.get('If-None-Match') == etag_value:
+            self.send_response(304)
+            self.send_header('ETag', etag_value)
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            if cache_max_age is not None:
+                self.send_header('Cache-Control', f'public, max-age={cache_max_age}')
+            self._set_cors_headers()
+            self.end_headers()
+            return
+
+        # Gzip compress if client accepts it and body > 1 KB
+        accept_encoding = self.headers.get('Accept-Encoding', '')
+        use_gzip = 'gzip' in accept_encoding and len(content) > 1024
+
+        if use_gzip:
+            buf = BytesIO()
+            with gzip.GzipFile(fileobj=buf, mode='wb') as gz:
+                gz.write(content)
+            compressed = buf.getvalue()
+        else:
+            compressed = content
+
         self.send_response(code)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', len(content))
+        self.send_header('Content-Length', len(compressed))
+        self.send_header('ETag', etag_value)
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('X-Frame-Options', 'DENY')
         self.send_header('Referrer-Policy', 'no-referrer')
+        if use_gzip:
+            self.send_header('Content-Encoding', 'gzip')
         if cache_max_age is not None:
             self.send_header('Cache-Control', f'public, max-age={cache_max_age}')
         self._set_cors_headers()
         self.end_headers()
-        self.wfile.write(content)
+        self.wfile.write(compressed)
 
     def _set_cors_headers(self):
         self.send_header('Access-Control-Allow-Origin', 'http://localhost:8080')

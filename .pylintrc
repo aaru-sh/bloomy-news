@@ -1,0 +1,25 @@
+[MAIN]
+py-version=3.8
+jobs=1
+
+[MESSAGES CONTROL]
+disable=
+    C0114,
+    C0115,
+    C0116,
+    R0903,
+    R0913,
+    W0212
+enable=
+    E0001,
+    E0002,
+    W0611,
+    W0612,
+    E1101
+
+[FORMAT]
+max-line-length=120
+
+[SOURCES]
+source-roots=.
+module-rgx=^[a-z_][a-z0-9_]*$

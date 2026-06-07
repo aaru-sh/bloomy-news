@@ -2,13 +2,30 @@
 # Fresh-install tests copy source files to a tempdir; coverage tracks
 # those copies and warns "no source" because they live outside the repo.
 disable_warnings = no_source
+omit =
+    tests/*
+    __pycache__/*
+    .git/*
+    .venv/*
+    scripts/*
+    docs/*
 
 [report]
-# Show line numbers missed for any file with > 0% coverage
-show_missing = True
-# Skip trivial lines (pass, raise NotImplementedError, etc.)
+fail_under = 68
+show_missing = true
+precision = 2
+skip_covered = true
 exclude_lines =
     pragma: no cover
+    def __repr__
+    if __name__ == .__main__
     raise NotImplementedError
-    if __name__ == .__main__.:
-    if TYPE_CHECKING:
+    pass
+    except ImportError
+    typing.TYPE_CHECKING
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml

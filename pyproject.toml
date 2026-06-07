@@ -52,6 +52,15 @@ dependencies = [
 "Bug Tracker" = "https://github.com/aaru-sh/bloomy-news/issues"
 "Changelog" = "https://github.com/aaru-sh/bloomy-news/blob/main/CHANGELOG.md"
 
+[tool.black]
+line-length = 120
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+known_first_party = ["scrapers", "classifier", "telegram", "database"]
+
 [tool.setuptools]
 # We don't actually ship a Python package — the project is a flat
 # script collection that runs from the project root. This block

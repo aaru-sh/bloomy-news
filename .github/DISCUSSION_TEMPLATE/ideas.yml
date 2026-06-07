@@ -1,0 +1,56 @@
+title: "[Idea] "
+labels: ["enhancement", "idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Have an idea to improve the project?** Share it here.
+        Check existing ideas first to avoid duplicates.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What pain point or gap does this idea address?
+      placeholder: "Currently there's no way to…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe your idea in detail.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Area of the project
+      options:
+        - Scrapers
+        - Classifier
+        - Dashboard
+        - Telegram digest
+        - Database / retention
+        - Tests / CI
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you thought about other approaches?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution willingness
+      options:
+        - label: I'd be willing to open a PR for this

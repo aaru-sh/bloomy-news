@@ -1,15 +1,15 @@
 ﻿# Bloomy News
 
-A self-hosted news desk for people who follow AI, machine learning, cybersecurity, and finance. Bloomy News runs on your own machine, pulls fresh articles from eight public sources twice a day, sorts them into six categories, removes duplicates, and shows the result in a local dashboard and a Telegram digest — no cloud, no account, no telemetry.
+[![CI](https://github.com/aaru-sh/bloomy-news/actions/workflows/ci.yml/badge.svg)](https://github.com/aaru-sh/bloomy-news/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/aaru-sh/bloomy-news/actions/workflows/codeql.yml/badge.svg)](https://github.com/aaru-sh/bloomy-news/actions/workflows/codeql.yml)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://img.shields.io/badge/tests-131%20passed-brightgreen)](https://github.com/aaru-sh/bloomy-news/actions)
+[![Coverage](https://img.shields.io/badge/coverage-68%25-yellow)](https://github.com/aaru-sh/bloomy-news)
+
+Bloomy News is a self-hosted AI news aggregator built in Python. It pulls fresh articles from RSS feeds and APIs, classifies them into machine learning, cybersecurity, and finance categories using an intelligent classifier, removes duplicates, and presents the result in a local dashboard and a Telegram digest — no cloud, no account, no telemetry.
 
 If you have built news aggregators before, head straight to [Quick start](#quick-start).
-
-[![Tests](https://github.com/aaru-sh/bloomy-news/actions/workflows/test.yml/badge.svg)](https://github.com/aaru-sh/bloomy-news/actions/workflows/test.yml)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/release/aaru-sh/bloomy-news?include_prereleases)](https://github.com/aaru-sh/bloomy-news/releases)
-[![Python](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
-[![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey.svg)]()
-[![Tests passing](https://img.shields.io/badge/tests-36%20unit%20%2B%208%20smoke-brightgreen.svg)](tests/)
 
 ## Who this is for
 

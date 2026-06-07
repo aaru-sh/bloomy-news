@@ -1,10 +1,178 @@
 ﻿# Contributing to Bloomy News
 
-Thanks for your interest in contributing. This document explains how to report bugs, request features, and submit code changes.
+Welcome! We're thrilled you're interested in contributing. Whether you're fixing a typo, adding a feature, or reporting a bug, every contribution matters. This guide will walk you through everything you need to get started.
+
+New to the project? Check out [docs/NEWCOMERS.md](docs/NEWCOMERS.md) for a full project overview.
+
+---
 
 ## Code of conduct
 
-Be kind. Be specific. Disagree on substance, not on style. We are all here to make a better news aggregator.
+Be kind. Be specific. Disagree on substance, not on style. We are all here to make a better news aggregator. Please read our [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
+
+---
+
+## Getting started
+
+### 1. Fork the repository
+
+Click the **Fork** button in the top-right corner of the [repo page](https://github.com/aaru-sh/bloomy-news) to create your own copy.
+
+### 2. Clone your fork
+
+```bash
+git clone https://github.com/<your-username>/bloomy-news.git
+cd bloomy-news
+```
+
+### 3. Create a virtual environment
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate      # Windows
+```
+
+### 4. Install dependencies
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+### 5. Run the tests
+
+```bash
+python -m unittest discover -s tests
+```
+
+All 131 tests should pass. Current coverage is 68%.
+
+### 6. Run the linter
+
+```bash
+python -m mypy news_tool.py database.py
+```
+
+mypy must pass before submitting any changes.
+
+---
+
+## Development workflow
+
+### 1. Create a branch from `main`
+
+```bash
+git checkout main
+git pull origin main
+git checkout -b feat/my-feature
+```
+
+Use a descriptive branch name with a prefix:
+
+- `feat/` for new features
+- `fix/` for bug fixes
+- `docs/` for documentation changes
+- `test/` for test additions or corrections
+- `chore/` for maintenance tasks
+
+### 2. Make your changes
+
+Write clean, readable code. Follow the code standards below.
+
+### 3. Write or update tests
+
+Every new feature must have tests. Every bug fix must have a regression test. Tests live in the `tests/` directory.
+
+### 4. Run the full test suite
+
+```bash
+python -m unittest discover -s tests
+```
+
+All tests must pass before you commit.
+
+### 5. Commit your changes
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat: add reddit scraper
+fix: handle empty summary in telegram digest
+docs: clarify scheduler catch-up logic
+test: add coverage for scheduler catch-up at 11:59
+chore: bump requests to 2.32.0
+```
+
+- Subject line: 50 chars or less, imperative mood, no trailing period
+- Body wraps at 72 chars and explains *why*, not *what*
+- One logical change per commit (atomic commits)
+
+### 6. Push and create a PR
+
+```bash
+git push origin feat/my-feature
+```
+
+Then open a pull request against `main` on the upstream repo.
+
+---
+
+## Code standards
+
+### Python
+
+- **Python 3.8+ compatible.** Do not use `X | None` union syntax — use `Optional[X]` from `typing`.
+- **Type hints** on all public functions and methods.
+- **mypy must pass.** Run `python -m mypy news_tool.py database.py` before committing.
+- **Docstrings** on all public functions in Google style:
+
+```python
+def fetch_articles(source: str, limit: int = 10) -> List[Article]:
+    """Fetch articles from a given source.
+
+    Args:
+        source: The source identifier to fetch from.
+        limit: Maximum number of articles to return.
+
+    Returns:
+        A list of Article objects.
+
+    Raises:
+        ValueError: If the source is not recognized.
+    """
+```
+
+- **No comments in code** unless explicitly requested in a review.
+- **Atomic commits.** Each commit should be a single logical change.
+- **f-strings** for string formatting. No `%` or `.format()`.
+- **No `print()` for normal-flow output.** Use the `logging` module.
+
+---
+
+## Testing requirements
+
+- **All new features** must include unit tests.
+- **Bug fixes** must include a regression test that would have caught the bug.
+- Tests go in the `tests/` directory.
+- Use `unittest.TestCase` and `unittest.mock` (no external test dependencies).
+- Run the full suite before submitting:
+
+```bash
+python -m unittest discover -s tests
+```
+
+- Follow existing test naming conventions and patterns in the codebase.
+
+---
+
+## Pull request guidelines
+
+- **One feature or fix per PR.** Keep PRs focused and reviewable.
+- **Clear PR title and description.** Explain what changed and why.
+- **Link related issues.** Use `Closes #N` or `Refs #N` in the description.
+- **Ensure CI passes.** All GitHub Actions checks must be green.
+- **Be responsive to review feedback.** Iteration is part of the process.
+- **Update documentation** if your change affects user-facing behavior.
 
 ---
 
@@ -33,84 +201,16 @@ Open a [feature request](../../issues/new?template=feature_request.md). Please i
 
 ---
 
-## Contributing code
+## Questions
 
-### Setting up a development environment
+Have a question? The best places to ask are:
 
-```bash
-git clone https://github.com/aaru-sh/bloomy-news.git
-cd bloomy-news
-python -m venv .venv
-source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-cp .env.example .env        # fill in any API keys you have
-```
+- **GitHub Discussions** — for general questions, architecture decisions, or brainstorming.
+- **Issues with the "question" label** — for specific, scoped questions about behavior or implementation.
 
-### Running the test suite
+---
 
-```bash
-python -m unittest tests.test_fixes -v
-```
-
-All 18 tests should pass. If you add a new test, add it to the appropriate class in `tests/test_fixes.py` and follow the existing naming convention.
-
-### Pull request process
-
-1. **Open an issue first** for non-trivial changes. We can save each other a lot of time by aligning on the approach before code is written.
-2. **Create a branch** off `main` with a descriptive name: `fix/issue-42-bookmark-race` or `feat/reddit-scraper`.
-3. **Make your changes.** Follow the code style below.
-4. **Add tests** for any new logic. The existing tests are the template.
-5. **Run the full test suite** — all tests must pass.
-6. **Update CHANGELOG.md** under the `[Unreleased]` section. Use the same sub-headings as the rest of the file (`Added`, `Changed`, `Fixed`, `Removed`).
-7. **Open a pull request** using the [PR template](../../pulls). The PR description should reference any related issues with `Closes #N` or `Refs #N`.
-8. **Wait for review.** Expect comments and revision requests. This is normal.
-
-### Code style
-
-#### Python
-
-- **PEP 8** with 4-space indents. No external linter is configured; the existing code is the style guide.
-- **Type hints** on all new public functions. Internal helpers can skip hints.
-- **f-strings** for string formatting. No `%` or `.format()`.
-- **Docstrings** for modules and public functions, but not for one-liners. Use the existing tone — terse, factual, no marketing language.
-- **No `print()` for normal-flow output.** Use the `logging` module or a module-level helper. The pipeline's `print()` calls are for user-facing CLI feedback; that's the exception.
-- **No silent failures.** Catch exceptions only when you can do something with them, and log the context. Re-raising is fine.
-
-#### JavaScript
-
-- **ES5-compatible syntax** — `var`, no arrow functions, no template literals, no `const`/`let`. This is intentional for maximum browser compatibility.
-- **`escapeHtml()` for any user-controlled string** before `innerHTML` assignment. Look at `app.js` for the helper.
-- **`safeUrl()` for any URL field** — only allows `http://` and `https://` schemes.
-- **Event delegation** is preferred over per-element listeners when the parent container is stable.
-- **No external dependencies.** The dashboard must work offline with no `<script src="https://...">` references.
-
-#### HTML / CSS
-
-- **Semantic tags first** — `<main>`, `<nav>`, `<article>`, `<section>`, `<button>`. Use ARIA only when semantics fail.
-- **CSS custom properties** for theme values. Light/dark switching is via `[data-theme="..."]` selectors, not media queries.
-- **All interactive elements** get a `:focus-visible` style. The browser default is not enough.
-
-#### Config
-
-- **No new top-level env vars without updating `.env.example`.** Add a comment explaining what the var is for and whether it's required.
-- **Placeholder syntax in JSON** is `${VAR_NAME}`. The `config.py` loader expands it. Do not put real keys in tracked JSON.
-
-### Commit messages
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-feat: add reddit scraper
-fix: handle empty summary in telegram digest
-docs: clarify scheduler catch-up logic
-refactor: extract Jaccard similarity to its own module
-test: add coverage for scheduler catch-up at 11:59
-chore: bump requests to 2.32.0
-```
-
-The subject line is 50 chars or less, imperative mood, no trailing period. The body wraps at 72 chars and explains *why*, not *what* (the diff shows the what).
-
-### Areas that need help
+## Areas that need help
 
 - **More scrapers** — Reddit, Hacker News (the comment site, not the security feed), Lobsters, Dev.to, specific Substack blogs
 - **Classifier improvements** — better keyword weighting, support for multi-language content, embedding-based classification
@@ -123,10 +223,14 @@ The subject line is 50 chars or less, imperative mood, no trailing period. The b
 
 ## Release process
 
-1. Bump version in any place it's referenced (currently no `__version__` constant; the version is in the README and the commit history).
+1. Bump version in any place it's referenced.
 2. Update `CHANGELOG.md` — move `[Unreleased]` changes to a new dated version block.
 3. Tag the release: `git tag -a v1.0.0 -m "Release 1.0.0"`.
 4. Push the tag: `git push origin v1.0.0`.
 5. The GitHub release is auto-generated from the tag, with the CHANGELOG section as the body.
 
 Releases happen when there's something worth shipping. There's no fixed cadence.
+
+---
+
+Thank you for contributing to Bloomy News!
