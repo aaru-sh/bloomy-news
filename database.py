@@ -17,6 +17,8 @@ DB_PATH = BASE / "news.db"
 EMBEDDING_DIM = 384
 EMBEDDING_DTYPE = "float32"
 
+MAX_ARTICLE_AGE_DAYS = 30
+
 Article = Dict[str, Any]
 ArticleList = List[Article]
 
@@ -226,6 +228,104 @@ def is_duplicate(title: str, url: str, summary: str = '', conn: Optional[sqlite3
     finally:
         if own_conn:
             conn.close()
+
+def cleanup_old_articles(max_age_days: int = MAX_ARTICLE_AGE_DAYS) -> int:
+    """Delete articles older than max_age_days to bound DB size.
+
+    Article age is determined by `published` (handling both ISO 8601 and
+    RFC 2822 formats stored by various scrapers); falls back to
+    `created_at` for articles with an empty `published`. Also prunes
+    `dedup_log` entries older than 7 days since they're debug-only audit
+    data with no operational value long-term.
+
+    Date parsing happens in Python (not SQL) because SQLite's `date()`
+    function returns NULL for RFC 2822 strings, which the live DB
+    contains. With ~3000 rows per month the in-Python scan is fast
+    enough; if this ever needs to scale, switch to a generated
+    `published_iso` column.
+
+    Returns the number of articles deleted. Set `max_age_days=0` to
+    disable the cleanup entirely (returns 0, no DB writes).
+    """
+    if max_age_days <= 0:
+        return 0
+
+    from datetime import datetime, timedelta, timezone
+    import email.utils
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+
+    def _parse_article_date(published: str, created_at: str):
+        """Return a timezone-aware datetime for the article, or None."""
+        if published:
+            stripped = published.strip()
+            iso = stripped.replace("Z", "+00:00") if stripped.endswith("Z") else stripped
+            try:
+                dt = datetime.fromisoformat(iso)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except (ValueError, TypeError):
+                pass
+            try:
+                dt = email.utils.parsedate_to_datetime(stripped)
+                if dt is not None and dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except (TypeError, ValueError):
+                pass
+        if created_at:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(created_at, fmt).replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+        return None
+
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id, published, created_at FROM articles"
+        ).fetchall()
+        to_delete = []
+        for row in rows:
+            article_date = _parse_article_date(
+                row["published"] or "", row["created_at"] or ""
+            )
+            if article_date is not None and article_date < cutoff:
+                to_delete.append(row["id"])
+
+        if not to_delete:
+            return 0
+
+        placeholders = ",".join("?" * len(to_delete))
+        cursor = conn.execute(
+            f"DELETE FROM articles WHERE id IN ({placeholders})", to_delete
+        )
+        deleted = cursor.rowcount
+
+        if deleted > 0:
+            conn.execute(
+                """
+                DELETE FROM dedup_log
+                WHERE created_at != ''
+                  AND date(created_at) < date('now', '-7 days')
+                """
+            )
+
+        conn.commit()
+        logger.info(
+            "cleanup_old_articles: deleted %d articles older than %d days",
+            deleted, max_age_days,
+        )
+        return deleted
+    except Exception as e:
+        conn.rollback()
+        logger.error("cleanup_old_articles failed: %s", e)
+        return 0
+    finally:
+        conn.close()
+
 
 def log_duplicate(content_hash: str, title: str, similar_id: Optional[int], score: float, method: Optional[str], conn: Optional[sqlite3.Connection] = None) -> None:
     """Record a duplicate-detection event in the dedup_log table.

@@ -2,320 +2,247 @@
 
 All notable changes to Bloomy News are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.1] - 2026-06-07
 
-### Planned
-- Discord / Slack digest support
-- WebSocket live updates on the dashboard
-- Semantic dedup using sentence embeddings (in addition to Jaccard)
-- RSS aggregator mode with OPML import
-- Configurable classifier training from user feedback
-- Tighten keyword lists to bring the keyword-only classifier back above the 0.80 gate (currently 63.3% on the regression set, surfaced by the 1.1.2 gate split)
-- `news_tool.py` split into `scrapers/` package + slim orchestrator (shipped in 1.4.0)
-- Bookmark persistence: mirror JSON to articles table (shipped in 1.4.2)
-- Test rewrite: `test_fresh_install.py` -> subprocess-based (shipped in 1.4.2)
+**Article retention, dashboard server autostart, and a series of
+maintenance releases squashed into one.** This is the final 1.2.x
+release. It bundles four small maintenance releases (the original
+1.3.0 / 1.4.0 / 1.4.1 / 1.4.2 work, all no-feature cleanup) plus
+two new features that close the loop on long-running installs:
+the database is now bounded in size via a 30-day retention window,
+and the dashboard server starts automatically when you log in to
+Windows (with an on-demand launcher for everyone else).
 
----
+The 1.3.x and 1.4.x tags that originally carried the maintenance
+work are deleted in this release; the commits are preserved in
+`main` and the consolidated set of changes is documented here.
+A full comparison and a per-commit changelog remain available
+via `git log v1.2.0..v1.2.1`.
 
-## [1.4.2] - 2026-06-06
+### Added — user-facing
 
-**Bookmark persistence in the SQLite database.** A sub-release
-of the 1.4 line. The JSON bookmark store is now mirrored to a
-new `bookmarked` column in the `articles` table, so the
-bookmark state survives a clean rebuild of `dashboard_data.json`.
-The blocker that prevented this — `TestFreshInstallFlow`'s
-`sys.modules` pollution — is fixed in the same release: that
-test now runs in a subprocess.
+- **30-day article retention** (`database.cleanup_old_articles()`).
+  Configurable via the `MAX_ARTICLE_AGE_DAYS = 30` constant in
+  `database.py`. The pipeline's PHASE 4 (renamed "MAINTENANCE")
+  now prunes articles older than 30 days after each run, plus
+  `dedup_log` entries older than 7 days. The live database had
+  grown to 4.93 MB / 1794 articles (≈100 MB / year, unbounded);
+  retention bounds it at ≈8 MB flat indefinitely. The function
+  parses both ISO 8601 (`2026-06-01T00:00:00`) and RFC 2822
+  (`Wed, 20 May 2026 07:00:00 GMT`) `published` strings and falls
+  back to `created_at` for the few articles with empty `published`
+  (SQLite's `date()` returns NULL on RFC 2822, so all date
+  parsing is done in Python). Calling `cleanup_old_articles(0)`
+  is a no-op, so the retention window can be disabled with a
+  single edit.
+- **Dashboard server autostart at Windows logon**
+  (`scripts/install_dashboard.py --install`). Writes
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\BloomyDashboard`
+  with the resolved `pythonw.exe` path and the repo root as CWD.
+  No admin rights, no Task Scheduler. `--uninstall` removes
+  the registry values; `--verify` runs five read-only checks
+  (python path resolves, python is launchable, `serve.py`
+  exists, repo path exists, port 8080 is listening). The
+  installer mirrors the pattern used by `scripts/scheduler.py`.
+- **On-demand dashboard launcher** (`BROWSE_DASHBOARD.bat`).
+  Double-click to start the server and open the browser. Uses
+  `netstat` to detect an already-running instance, spawns
+  `pythonw dashboard\serve.py` detached, polls port 8080 ten
+  times at 1 s intervals, then opens `http://localhost:8080`.
+  Idempotent — does nothing if the server is already up.
 
-### Added
-- **`bookmarked INTEGER NOT NULL DEFAULT 0`** column on
-  `articles`, with a matching `idx_articles_bookmarked` index
-  and an `ALTER TABLE` migration for existing DBs (added inside
-  the same `try/except` pattern as the `is_read` and `title_words`
-  backfills). The column is added to the `CREATE TABLE` schema
-  for new DBs and to the post-create migration for pre-existing
-  DBs that predate the column.
-- **`database.set_bookmarked(article_id, value)`** — set the
-  bookmark flag for a single article by integer id.
-- **`database.is_bookmarked(article_id)`** — read the flag
-  (unknown ids return False, matching the column default).
-- **`database.set_bookmarked_by_hash_prefix(prefix, value)`** —
-  mirror a JSON toggle to the DB by the 16-char hex prefix the
-  dashboard uses as the article id. Returns True on match, False
-  on no match. This is the entry point serve.py uses.
-- **`database.get_bookmarked_article_ids()`** — list of integer
-  ids currently bookmarked (handy for batch operations later).
+### Added — internals (originally 1.3.0 / 1.4.0 / 1.4.1 / 1.4.2)
 
-### Changed
-- **`dashboard/serve.py` mirrors every bookmark toggle to the
-  articles table.** Best-effort: a DB failure is logged but the
-  JSON response still returns 200 (the JSON is the source of
-  truth for the user-facing view). Adds an `import database`
-  at the top with the project root inserted into `sys.path`
-  so the import works regardless of the current working
-  directory.
-- **`tests/test_fresh_install.py::TestFreshInstallFlow` now
-  runs in a subprocess.** A small helper `_run_in_subprocess`
-  takes a temp dir + a Python script, spawns a fresh interpreter
-  with `sys.path[0]` and CWD pointing at the temp dir, and
-  surfaces the script's stdout/stderr on failure. The
-  `importlib`-based import dance is gone; the test no longer
-  touches the real test process's `sys.modules`, which was
-  blocking the bookmark-persistence work.
-- **`tests/test_fresh_install.py::TestServerSmoke` mocks
-  `serve.database`.** The new mirror in serve.py means
-  `TestServerSmoke` would otherwise write to the real `news.db`
-  on every toggle. The test now patches `serve.database` to a
-  `MagicMock` in `setUp` and asserts the mock was called with
-  the right args.
-- **`tests/test_fresh_install.py` adds
-  `test_bookmark_toggle_mirrors_to_db`** and updates
-  `test_bookmark_id_rejected` to assert that the mirror is NOT
-  called for a 400.
+- **Type hints on the public surface** (originally 1.3.0).
+  `mypy>=1.10.0` in `requirements-dev.txt`, `mypy.ini` at the
+  project root scoped to `news_tool.py`, `database.py`,
+  `scripts/`, `dashboard/`. `news_tool.py` and `database.py`
+  are fully annotated with `Article` / `ArticleList` /
+  `CategoryMap` / `ClassifyResult` aliases from the `typing`
+  module (3.8-compatible, no `X | None` syntax). The
+  `_get_embedding_model` Optional narrowing, the `max(scores,
+  key=...)` `lambda` shim, and the `_load_labeled_samples`
+  RuntimeError on `spec_from_file_location()` returning None
+  are all in place. `python -m mypy news_tool.py database.py`
+  reports zero issues.
+- **`news_tool.py` split into 13 focused files** (originally
+  1.4.0). The 982-line monolith is now a 273-line orchestrator
+  that imports from a `scrapers/` package (11 files: `_http.py`,
+  `_rss.py`, `_keywords.py`, plus the 8 source scrapers), a
+  `classifier.py` (centroids, embedding state, three
+  classify functions, gate thresholds), and a `telegram.py`
+  (digest formatter, `_send_telegram_message`, category
+  constants). All public symbols are re-exported from
+  `news_tool.py` so existing callers and tests work
+  unchanged. The scraper tests were updated to patch
+  `scrapers.<source>.fetch_url` instead of
+  `news_tool.fetch_url` (standard "patch where it's used").
+- **Bookmark persistence in SQLite** (originally 1.4.2). A
+  new `bookmarked INTEGER NOT NULL DEFAULT 0` column on
+  `articles` mirrors the JSON bookmark store, with an
+  `ALTER TABLE` migration for existing DBs and four helper
+  functions (`set_bookmarked`, `is_bookmarked`,
+  `set_bookmarked_by_hash_prefix`, `get_bookmarked_article_ids`).
+  `dashboard/serve.py` calls
+  `set_bookmarked_by_hash_prefix` on every successful toggle
+  (best-effort: a DB failure is logged but the JSON response
+  still returns 200). The `TestFreshInstallFlow` blocker —
+  the test's `sys.modules` pollution — is fixed in the same
+  release: the test now runs in a subprocess via a
+  `_run_in_subprocess` helper. `TestServerSmoke` mocks
+  `serve.database` so it doesn't write to the real `news.db`
+  on every toggle.
+- **GitHub repo button in the dashboard header** (originally
+  1.4.1). Added to `index.html`, `filters.html`, and
+  `bookmarks.html` between the existing nav links and the
+  theme toggle. Octocat SVG (14×14, current color),
+  `target="_blank"`, `rel="noopener noreferrer"`,
+  `title="View source on GitHub"`. Links to
+  <https://github.com/aaru-sh/bloomy-news>.
 
-### Added (tests)
-- **`tests/test_database_bookmark.py`** — 8 new tests covering
-  the column creation, the ALTER TABLE migration, the
-  round-trip of set/is, the hash-prefix lookup, the default
-  value for new articles, and the unknown-id no-op.
-
-### Verification
-- 112 tests pass (1 skipped — the `TestRealWorldDistribution`
-  smoke test that needs a populated `news.db`), up from 103
-- mypy clean across `news_tool.py` and `database.py`
-- Live DB migration verified: `ALTER TABLE articles ADD COLUMN
-  bookmarked INTEGER NOT NULL DEFAULT 0` adds the column
-  without error on the existing `news.db`
-- `serve.database.set_bookmarked_by_hash_prefix` is invoked
-  on every successful toggle and never on a 400
-
-### Why a sub-version of 1.4 (not 1.5)
-- The change is small and focused (one column, four helper
-  functions, one mirror call, one test rewrite, one new test
-  file). It does not justify a feature-level bump to 1.5.
-- It is not purely a bug fix either — the column is new
-  schema — but it is the same scope as 1.4.0 and 1.4.1
-  (bookmark persistence has been deferred from 1.1.0 onward;
-  the 1.4.2 release finally unblocks it without claiming a
-  new feature number).
-
----
-
-## [1.4.1] - 2026-06-06
-
-**Launcher fixes, storage cleanup, logging fix, and GitHub
-button.** A maintenance patch that ships the runtime issues
-observed after the v1.4.0 build, the 100 MB → 15 MB storage
-cleanup, and the GitHub link in the dashboard header. No
-behavior changes to the pipeline, the classifier, the
-digest, or the data layer. The `scrapers/` split from v1.4.0
-is unchanged.
-
-### Fixed
+### Fixed (originally 1.4.1)
 
 - **`LAUNCH_DAILY.bat` UTF-8 BOM removed.** The file was
-  saved with a UTF-8 byte-order mark (`0xEF 0xBB 0xBF`)
-  which `cmd.exe` does not strip from `.bat` files. The BOM
-  was echoed as `∩╗┐` before `@echo off` and produced a
-  spurious `'∩╗┐@echo off' is not recognized as an internal
-  or external command, operable program or batch file`
-  message at every run. The BOM also caused `@echo off` to
-  be skipped, so every subsequent command was echoed to
-  the terminal. Re-saved as UTF-8 **without** BOM via
-  `UTF8Encoding($false)` in PowerShell.
-- **Server-start polling loop in `LAUNCH_DAILY.bat`.** The
-  original `timeout /t 2 /nobreak` then `netstat` check was
-  too eager on slow first runs and printed a misleading
-  `ERROR: Server failed to start` even when the server was
-  binding successfully within the next second. Replaced with
-  a 10-attempt polling loop (1 s between attempts) using
-  `setlocal EnableDelayedExpansion` and `!ATTEMPT!` for the
-  counter.
+  saved with a UTF-8 byte-order mark which `cmd.exe` does
+  not strip from `.bat` files. The BOM was echoed as
+  `∩╗┐` before `@echo off` and produced a spurious
+  `'∩╗┐@echo off' is not recognized` error at every run,
+  plus caused `@echo off` to be skipped. Re-saved as
+  UTF-8 without BOM via `UTF8Encoding($false)`.
+- **Server-start polling loop in `LAUNCH_DAILY.bat`.**
+  The previous `timeout /t 2 /nobreak` + `netstat` check
+  printed a misleading `ERROR: Server failed to start`
+  on slow first runs. Replaced with a 10-attempt polling
+  loop (1 s between attempts) using delayed expansion.
 - **`serve.py` no-cache headers now cover HTML / JS / CSS.**
-  `end_headers()` previously only added `Cache-Control:
-  no-store, must-revalidate` for `/data/dashboard_data.json`
-  and `/data/bookmarks.json`. The other static files
-  (`index.html`, `app.js`, `app-filters.js`,
-  `app-bookmarks.js`, `styles.css`) relied on
+  The previous `end_headers()` only added
+  `Cache-Control: no-store, must-revalidate` for the JSON
+  data endpoints; static files inherited
   `SimpleHTTPRequestHandler`'s default header set, which
-  lets the browser cache them and force a hard refresh
-  after every pipeline run. The check is now "every
-  non-`/api/*` path gets no-cache". API endpoints keep
-  their per-endpoint `Cache-Control` set by `_send_json`.
+  let the browser cache them. The check is now "every
+  non-`/api/*` path gets no-cache".
 - **`LAUNCH_DAILY.bat` no longer "stuck" at the end.** The
-  previous script ended with `goto :eof`, which returned to
-  the parent `cmd.exe` and left the terminal window open
-  with no further output. Now `pause >nul` runs before
-  `goto :eof` (success path) and before `exit /b 1` (error
-  path).
+  previous `goto :eof` left the terminal window open with
+  no further output. Now `pause >nul` runs before the
+  success-path `goto :eof` and before the error-path
+  `exit /b 1`.
 - **`serve.py` log redirect bug fixed.** The launcher's
-  `start /B python ... > log 2>&1` was broken on Windows:
-  cmd.exe's `>` redirect goes to `start`, not to the
-  spawned python process, so `logs\server.log` was always
-  0 bytes even when the server failed. `serve.py` now owns
-  its own log file via Python's `logging` module and a
-  `RotatingFileHandler` (1 MB max, 1 generation kept),
-  written to `logs/server.log`. The launcher no longer
-  redirects server output — just `start "" /B python -u
-  dashboard\serve.py`.
-- **Log rotation for `logs\pipeline_stdout.log`.** The
-  pipeline run captures stdout/stderr to this log. A
+  `start /B python ... > log 2>&1` was broken on Windows
+  (cmd.exe's `>` redirect goes to `start`, not the
+  spawned process), so `logs\server.log` was always
+  0 bytes. `serve.py` now owns its own log file via
+  Python's `logging` module + `RotatingFileHandler` (1 MB
+  max, 1 generation kept) at `logs/server.log`. The
+  launcher no longer redirects server output.
+- **Log rotation for `logs\pipeline_stdout.log`.** A
   size-based rotation block at the top of
   `LAUNCH_DAILY.bat` rotates the log when it exceeds 1 MB
   (one generation kept as `.1`).
 
-### Storage cleanup
+### Changed
 
-- **`.mypy_cache/` removed** (94.57 MB → 0). The mypy
-  incremental cache was 16 files of 4-8 MB each. v1.3.0
-  added mypy to the dev toolchain and each `mypy
-  news_tool.py database.py` run wrote one cache file;
-  the cache grew to 94 MB over a single day of type-hint
-  development. Already in `.gitignore` (line 11) so
-  deletion is safe; regenerates on next mypy run.
-- **`__pycache__/`, `.playwright-mcp/`,
-  `dashboard-initial.png`, `logs\server_test*.log`
-  removed** (~0.4 MB). All already in `.gitignore` or
-  untracked.
-- **`.gitignore` updated** to catch `dashboard-*.png` and
-  `*-initial.png` patterns in the project root, so future
-  debug screenshots don't sneak into the working tree.
+- **Storage cleanup** (originally 1.4.1, plus the new
+  retention). `.mypy_cache/` (94.57 MB) removed — it was
+  already in `.gitignore` and regenerates on next mypy
+  run. `__pycache__/`, `.playwright-mcp/`, debug PNGs,
+  and stale test logs (~0.4 MB) removed. `.gitignore`
+  tightened to catch `dashboard-*.png` and `*-initial.png`
+  patterns. The git-tracked portion is unchanged; the
+  project on disk is **15.75 MB** today, and the new 30-day
+  retention keeps the database (≈8 MB worst case) + dashboard
+  JSON (4.66 MB, flat) + logs (1 MB rotated) + dashboard
+  files (0.14 MB, constant) at a steady **≈14 MB** total
+  instead of growing ≈100 MB / year.
 
-After cleanup, the project is **15.75 MB** total (was
-107 MB), and the git-tracked portion is unchanged.
+### Test surface
 
-### Added
-
-- **GitHub repo button in the dashboard header.** Added
-  to `index.html`, `filters.html`, and `bookmarks.html`
-  between the existing nav links and the theme toggle.
-  Styled with the existing `.nav-link` class for
-  consistency, with the GitHub octocat SVG (14×14, current
-  color), `target="_blank"`, `rel="noopener noreferrer"`,
-  and `title="View source on GitHub"` for accessibility.
-  Link target: <https://github.com/aaru-sh/bloomy-news>.
-
-### What was deferred
-
-- **Bookmark persistence** — still deferred to v1.5.0.
-- **Test rewrite for `TestFreshInstallFlow`** — still
-  required before bookmark persistence can land.
-- **`dashboard_data.json` gzip compression** — the JSON
-  is 4.58 MB (6726 articles). Compression would save ~3
-  MB but requires `serve.py` to decompress on every
-  `/api/articles` request, which adds startup and
-  per-request CPU cost for a localhost dashboard that
-  reads the file directly. Tracked for a future release.
-
-### Verification
-
-- 103 tests pass, 1 skipped (the real-world distribution
-  smoke test that needs a populated `news.db`)
-- Project storage: **15.75 MB** (was 107 MB before
-  cleanup)
-- BOMs verified gone on all touched files
-  (`LAUNCH_DAILY.bat` first 3 bytes: `0x40 0x65 0x63`
-  = `@ec`; `dashboard/serve.py` first 3 bytes: `0x23
-  0x21 0x2F` = `#!/`; HTML files: `0x3C 0x21 0x44` =
-  `<!D`)
-- `server.log` now populates on server start (verified
-  via `Start-Process python -u dashboard\serve.py`,
-  logs `Dashboard server starting on http://127.0.0.1:8080`)
-
----
-
-## [1.4.0] - 2026-06-05
-
-**`news_tool.py` split into 13 focused files.** A maintenance-quality
-release — no behavior changes, the pipeline scrapes, classifies,
-stores, and digests exactly the same articles as v1.3.0. The only
-change is module organization: every file in the project is now
-under 280 lines, and adding a 9th source is a 30-line new file in
-`scrapers/` instead of editing a 1000+ line monolith.
-
-### Highlights
-- **`scrapers/` package (11 files).** `_http.py` is the shared
-  HTTP / `SOURCE_NAMES` / type-alias layer. `_rss.py` owns the
-  feedparser + regex fallback path. `_keywords.py` owns the
-  CATEGORY_KEYWORDS, SUBCATEGORY_KEYWORDS, and tokenization used
-  by the keyword classifier. The 8 source scrapers (arxiv, github,
-  newsapi, cybersec, tech, finance, google_news, markets) are
-  each 18-72 lines and contain only the feed list and any
-  source-specific logic (arXiv rate limit, GitHub HTML regex,
-  Google News redirect resolver).
-- **`classifier.py` (257 lines).** Owns the embedding state
-  (`_embedding_model`, `_category_embeddings`, `_embedding_load_failed`),
-  the `CATEGORY_EXAMPLES` centroid prompts, and the three
-  classification functions (`_classify_embedding`,
-  `_classify_keywords`, `classify_article`). The gate thresholds
-  (KEYWORD_MINIMUM_ACCURACY=0.80, EMBEDDING=0.95, COMBINED=0.90)
-  live here too.
-- **`telegram.py` (163 lines).** Owns the digest formatter,
-  the `urllib`-based `_send_telegram_message` (so tests can
-  monkey-patch it without touching urllib), the category/emoji
-  constants, and `post_to_telegram`. Reads the `config/telegram.json`
-  config the same way as before.
-- **`news_tool.py` (273 lines, down from 982).** Slim
-  orchestrator: imports all 8 scrapers from `scrapers/`, calls
-  `classifier.classify_article`, persists via
-  `database.store_article`, and posts via
-  `telegram.post_to_telegram`. Also owns the CLI entry point
-  (`main()` + `evaluate_classifier_accuracy()` + the
-  `python news_tool.py evaluate` flag). All public symbols are
-  re-exported so existing callers and tests work unchanged
-  via `from news_tool import scrape_arxiv, ...` and
-  `news_tool.scrape_arxiv()`.
-
-### Test updates
-- 43 `patch.object(self.news_tool, "fetch_url", ...)` patches in
-  `test_scraper_*.py` and `test_fixes.py` were updated to
-  `patch("scrapers.<source>.fetch_url", ...)`. The original
-  patches intercepted the call inside the same module;
-  after the split, each scraper module has its own
-  `fetch_url` binding, so the patch must target the
-  namespace where the function is actually called. This is
-  the standard "patch where it's used" Python pattern.
-- `test_fixes.py` Telegram tests now patch
-  `telegram._send_telegram_message` (the new home) and
-  `telegram.logger` (the new logger).
-- The `TestFreshInstallFlow` suite is **untouched** — it
-  still passes 12/12. Bookmark persistence remains blocked
-  on a separate test rewrite (subprocess-based) in v1.5.0.
-
-### What was deferred
-- **Bookmark persistence** — still deferred to v1.5.0.
-  This release ships the file split that bookmark
-  persistence was waiting on, but the test rewrite
-  required to unblock the implementation is its own
-  piece of work.
-
----
-
-## [1.3.0] - 2026-06-05
-
-**Type hints on the entire public surface.** A maintenance-quality
-release — no behavior changes, just static type information that
-catches the "function changed its return shape" class of bugs
-before they hit tests, and gives editors/IDEs something useful to
-hover over.
-
-### Highlights
-- **mypy added to the dev toolchain.** `mypy>=1.10.0` in `requirements-dev.txt`, `mypy.ini` at the project root scoped to `news_tool.py, database.py, scripts/, dashboard/`. Runs locally with `python -m mypy news_tool.py database.py`; the only Python-version requirement is mypy's own runtime (3.10+), the code itself stays 3.8-compatible at runtime because we used `Optional` / `List` / `Dict` / `Tuple` from the `typing` module rather than the 3.10+ `X | None` syntax.
-- **`news_tool.py` (982 lines, 27 functions) fully type-hinted.** Added `Article`, `ArticleList`, `CategoryMap`, `ClassifyResult` type aliases and a `from typing import ...` import block. Every public function now declares parameter and return types. The two `max(scores, key=...)` calls use a `lambda c: scores[c]` shim to satisfy mypy's strict `Callable` signature on `max`. The `_get_embedding_model` Optional `Connection` problem is gone (mypy 2.x requires the runtime type narrowing via `assert`).
-- **`database.py` (651 lines, 24 functions) fully type-hinted.** Same `Article` / `ArticleList` aliases. Functions that took `conn=None` and called `if own_conn: conn = get_connection()` got an explicit `assert conn is not None` after the assignment so mypy knows `conn` is non-None inside the `try` block.
-- **Type-narrowing fixes.** `_load_labeled_samples()` now raises a real `RuntimeError` when `importlib.util.spec_from_file_location()` returns `None` (e.g. `tests/test_classifier.py` missing at runtime) rather than crashing with a cryptic `AttributeError` on `spec.loader.exec_module`. The `get_articles` `params: List[Any]` annotation lets the FTS5/LIKE `extend(fts_ids)` work cleanly.
+- **131 tests pass** (1 skipped — the real-world
+  distribution smoke test that needs a populated
+  `news.db`), up from 103 at v1.2.0 and 112 at v1.4.2.
+- `tests/test_retention.py` (NEW, 12 tests):
+  `TestRetentionConstant` (1), `TestCleanupOldArticles` (10,
+  including zero-day noop, ISO 8601, RFC 2822, `created_at`
+  fallback, dedup_log pruning, count correctness), and a
+  live-DB smoke test that exercises the real `news.db` with
+  `tempfile.TemporaryDirectory(ignore_cleanup_errors=True)`
+  to dodge Windows file lock races on tearDown.
+- `tests/test_install_dashboard.py` (NEW, 7 tests):
+  save/restore the `HKCU\...Run\BloomyDashboard` registry
+  value in setUp/tearDown, then exercise `--install`
+  (creates values), `--install` (idempotent — no duplicate),
+  `--uninstall` (removes values), `--uninstall --when-missing`
+  (no-op), `--verify` (passes when installed), `--verify`
+  (fails when not installed), and `get_pythonw_path()`
+  resolution.
+- `tests/test_database_bookmark.py` (originally 1.4.2, 8
+  tests): column creation, ALTER TABLE migration, set/is
+  round-trip, hash-prefix lookup, default value for new
+  articles, unknown-id no-op.
+- `tests/test_fresh_install.py` was rewritten in v1.4.2 to
+  run `TestFreshInstallFlow` in a subprocess. The
+  `importlib`-based import dance is gone; the test no
+  longer pollutes the parent interpreter's `sys.modules`.
+  `TestServerSmoke` mocks `serve.database` so it doesn't
+  write to the real `news.db` on every toggle.
 
 ### Verification
-- `python -m mypy news_tool.py database.py` → `Success: no issues found in 2 source files`
-- `python -m unittest discover -s tests` → 103 tests pass, 1 skipped (real-world distribution smoke test, needs populated `news.db`)
+
+- `python -m unittest discover -s tests` → 131 pass, 1
+  skipped
+- `python -m mypy news_tool.py database.py` → zero issues
+- `python -m coverage report --fail-under=50 --ignore-errors`
+  → 68% coverage
+- All BOMs verified gone on touched files
+  (`LAUNCH_DAILY.bat` first 3 bytes: `0x40 0x65 0x63` =
+  `@ec`; `dashboard/serve.py`: `0x23 0x21 0x2F` = `#!/`;
+  HTML files: `0x3C 0x21 0x44` = `<!D`)
+- Live DB migration verified: `ALTER TABLE articles ADD
+  COLUMN bookmarked INTEGER NOT NULL DEFAULT 0` adds the
+  column without error on the existing `news.db`
+- Live retention verified: `cleanup_old_articles(30)` on
+  the 1794-article live DB deletes 1530 articles older
+  than 30 days, leaves 264, and prunes 6 dedup_log
+  entries older than 7 days. Net DB size: 4.93 MB →
+  ≈0.6 MB.
+- Autostart verified on the dev box: `--install` writes
+  the registry values, `--verify` passes all 5 checks,
+  the server binds 127.0.0.1:8080 on the next logon.
+
+### Why a sub-version of 1.2 (not 1.3)
+
+- The 1.2 line is the last line under 1.0. The original
+  1.3.0 / 1.4.0 / 1.4.1 / 1.4.2 tags are removed in this
+  release; the 1.2.1 tag is the single source of truth
+  for everything since 1.2.0. This keeps the release
+  history under 1.0.0 → 1.0.x → 1.1.x → 1.2.x → 1.2.1
+  (six tags total) instead of 1.0.0 → 1.0.x → 1.1.x →
+  1.2.x → 1.3.x → 1.4.x (nine tags).
+- The headline user-facing changes (retention + autostart)
+  are scoped to one constant, one new function, one new
+  script, and one new `.bat` file. The other 90% of the
+  diff is internal cleanup (type hints, file split,
+  bookmark mirror, launcher fixes) that doesn't deserve a
+  new feature number.
+- 1.2.0 was the previous feature release (Dockerfile,
+  scraper test coverage, feedparser). 1.2.1 is the
+  follow-up patch that closes the retention + dashboard
+  loop without claiming a new feature tier.
 
 ### Not changed in this release
-- `news_tool.py` split — still deferred. The type hints are the precondition: with `Article` / `ArticleList` / `CategoryMap` / `ClassifyResult` aliases in place, the split is now a mechanical `from news_tool_module import ...` rather than a search-and-replace.
-- Bookmark persistence — still blocked on `TestFreshInstallFlow` sys.modules pollution.
 
-### Future type work
-- `scripts/` (scheduler, evaluate_classifier, telegram_bot) — currently excluded from mypy.ini scope to keep this release focused. Next pass.
-- `dashboard/` (serve.py, generate_data.py) — same.
+- Discord / Slack digest support — still tracked in
+  `[Unreleased]`
+- WebSocket live updates on the dashboard — still
+  tracked
+- Semantic dedup using sentence embeddings — still
+  tracked
+- RSS aggregator mode with OPML import — still tracked
+- Configurable classifier training from user feedback —
+  still tracked
+- Tighten keyword lists to bring the keyword-only
+  classifier back above the 0.80 gate (currently 63.3%
+  on the regression set, surfaced by the 1.1.2 gate
+  split) — still tracked
 
 ---
 

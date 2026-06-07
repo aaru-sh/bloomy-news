@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Bloomy News Excavator - pipeline orchestrator.
 
 This module is the slim entry point: it composes the 8 scrapers from
@@ -248,7 +248,7 @@ def main() -> None:
         logger.error(f"Telegram posting failed: {e}")
         print(f"  ERROR: Telegram failed: {e}")
 
-    print("\nPHASE 4: CLEANUP")
+    print("\nPHASE 4: MAINTENANCE")
     print("-" * 40)
 
     raw_dir = BASE / "raw"
@@ -256,6 +256,12 @@ def main() -> None:
         shutil.rmtree(raw_dir, ignore_errors=True)
         logger.info("Cleaned up raw data directory")
         print("  Raw files cleaned")
+
+    deleted = database.cleanup_old_articles()
+    if deleted:
+        print(f"  Pruned {deleted} articles older than {database.MAX_ARTICLE_AGE_DAYS} days")
+    else:
+        print(f"  No articles older than {database.MAX_ARTICLE_AGE_DAYS} days to prune")
 
     print("\n" + "=" * 60)
     print("  DONE!")
